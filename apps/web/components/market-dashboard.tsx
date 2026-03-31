@@ -82,15 +82,14 @@ export async function MarketDashboard() {
       <section className="panel">
         <div className="section-head">
           <h2>Operator panels</h2>
-          <p className="muted">UI placeholders are wired for upcoming Phase 2 and 3 pages.</p>
+          <p className="muted">Research workflow shortcuts for detail, replay, backtests, and paper trading.</p>
         </div>
         <div className="stack">
-          <div className="list-card">Order book view</div>
-          <div className="list-card">Recent trades view</div>
-          <div className="list-card">Fair value vs market price chart</div>
-          <div className="list-card">Feature panel</div>
-          <div className="list-card">Strategy signals panel</div>
-          <div className="list-card">Backtest results page</div>
+          <Link className="list-card" href="/backtests">Backtest results page</Link>
+          <Link className="list-card" href="/paper-trading">Paper trading page</Link>
+          <div className="list-card">Order book and trade monitor</div>
+          <div className="list-card">Fair value and feature panel</div>
+          <div className="list-card">Strategy signal inspection</div>
         </div>
       </section>
     </div>

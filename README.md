@@ -13,6 +13,15 @@ Production-minded research and trading platform scaffold for Polymarket, startin
 - Docker Compose local stack
 - Seed data and sample tests
 
+## Current build status
+
+- Phase 1: implemented as a mock-first vertical slice with Polymarket and Hyperliquid ingestion, replay, and dashboard pages
+- Phase 2: partially implemented with market-window alignment, local and external CVD features, and a baseline fair-value model
+- Phase 3: partially implemented with a strategy registry, stored backtest reports, and cost-aware baseline backtest scaffolding
+- Phase 4: partially implemented with paper-trading status and blotter plus execution and rules-engine scaffolds
+
+The remaining work is still explicit in code and docs: persistent historical ingestion into the full Timescale schema, richer queue and latency simulation, and a real live-paper loop.
+
 ## Monorepo layout
 
 - `apps/api`: FastAPI backend and API composition root
@@ -71,7 +80,34 @@ npm run dev
 
 ## Environment
 
-See [infrastructure/env/.env.example](C:/Users/Mahdi/Documents/Polymarket_Trader/infrastructure/env/.env.example) for supported variables. Live execution is disabled by default. Polymarket and Hyperliquid connectivity are isolated behind adapters so mock clients can be used in development and tests.
+See [infrastructure/env/.env.example](C:/Users/Mahdi/Documents/Polymarket_Trader/infrastructure/env/.env.example) for supported variables. Live execution is disabled by default. Polymarket connectivity and external historical market data are isolated behind adapters so mock clients and pluggable providers can be used in development and tests.
+
+The initial free historical provider is Binance, but downstream services consume only normalized internal bars, trades, and order book snapshots. Provider selection is configuration-driven so future sources such as Tardis, Parquet, or custom datasets do not require replay or strategy rewrites.
+
+## External Market Data Providers
+
+The external historical market data path now uses a provider interface in [packages/clients/market_data_provider/base.py](C:/Users/Mahdi/Documents/Polymarket_Trader/packages/clients/market_data_provider/base.py).
+
+- Provider interface: `HistoricalMarketDataProvider`
+- Normalized internal models: `OHLCVBar`, `ExternalTrade`, `ExternalOrderBookSnapshot`, `ProviderCapabilities`
+- Provider selection: `EXTERNAL_HISTORICAL_PROVIDER=binance`
+- Symbol mapping: `EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT"}`
+
+Current provider support:
+- `binance`: implemented for historical 1-minute OHLCV, with trades and snapshots available as provider methods
+- `tardis`: placeholder scaffold
+- `parquet`: placeholder scaffold
+
+The application stores both raw provider payloads and normalized records in the in-memory runtime state. Downstream modules consume only normalized internal models.
+
+Optional local persistence for feature snapshots, backtest reports, and paper decisions can be enabled with:
+
+```bash
+ENABLE_DB_PERSISTENCE=true
+SQLITE_FALLBACK_PATH=data/polymarket_trader.db
+```
+
+That persistence layer is a local development helper, not a claim that the full Timescale ingestion path is already finished.
 
 ## Phase 1 API endpoints
 
@@ -85,10 +121,22 @@ See [infrastructure/env/.env.example](C:/Users/Mahdi/Documents/Polymarket_Trader
 - `POST /api/v1/ingestion/bootstrap`
 - `GET /api/v1/strategies`
 - `POST /api/v1/backtests/{market_id}`
+- `GET /api/v1/backtests`
+- `GET /api/v1/backtests/{run_id}`
 - `GET /api/v1/paper-trading/blotter`
+- `GET /api/v1/paper-trading/status`
+- `POST /api/v1/paper-trading/run/{market_id}`
 - `GET /api/v1/risk/settings`
 - `GET /api/v1/execution/status`
 - `GET /api/v1/system/health`
+
+## Web pages
+
+- `/`: active market dashboard
+- `/markets/[marketId]`: market detail with local and external context plus feature panel
+- `/replay`: historical replay viewer
+- `/backtests`: backtest results and strategy list
+- `/paper-trading`: paper blotter and strategy status
 
 ## Testing
 

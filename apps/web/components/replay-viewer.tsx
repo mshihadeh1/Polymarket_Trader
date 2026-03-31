@@ -33,7 +33,9 @@ export async function ReplayViewer({ marketId }: ReplayViewerProps) {
             <div className="timeline-row" key={`${event.ts}-${index}`}>
               <div>
                 <strong>{event.event_type}</strong>
-                <div className="table-meta">{new Date(event.ts).toLocaleString()}</div>
+                <div className="table-meta">
+                  {event.venue} • {new Date(event.ts).toLocaleString()}
+                </div>
               </div>
               <pre>{JSON.stringify(event.payload, null, 2)}</pre>
             </div>

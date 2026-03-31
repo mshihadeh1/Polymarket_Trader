@@ -21,8 +21,8 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
           <p className="eyebrow">{market.market_type}</p>
           <h1>{market.title}</h1>
           <p className="muted">
-            Underlying {market.underlying} • strike {market.price_to_beat ?? "n/a"} •
-            close {market.closes_at ? new Date(market.closes_at).toLocaleString() : "n/a"}
+            Underlying {market.underlying} • strike {market.price_to_beat ?? "n/a"} • close{" "}
+            {market.closes_at ? new Date(market.closes_at).toLocaleString() : "n/a"}
           </p>
         </div>
         <div className="detail-grid">
@@ -38,18 +38,14 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
             </span>
           </div>
           <div className="list-card">
-            <strong>Hyperliquid</strong>
-            <span>
-              {market.external_context?.current_price?.toFixed(2) ?? "n/a"}
-            </span>
-            <span className="muted">
-              since open {pct(market.external_context?.return_since_open)}
-            </span>
+            <strong>{market.external_context?.provider ?? "External market"}</strong>
+            <span>{market.external_context?.current_price?.toFixed(2) ?? "n/a"}</span>
+            <span className="muted">since open {pct(market.external_context?.return_since_open)}</span>
           </div>
           <div className="list-card">
             <strong>Feature snapshot</strong>
             <span>Local CVD {latestFeature?.polymarket_cvd ?? "n/a"}</span>
-            <span>External CVD {latestFeature?.hyperliquid_cvd ?? "n/a"}</span>
+            <span>External CVD {latestFeature?.external_cvd ?? "n/a"}</span>
             <span className="muted">Fair-value gap {pct(latestFeature?.fair_value_gap)}</span>
           </div>
         </div>
@@ -63,8 +59,12 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
           <Link className="list-card" href={`/replay?marketId=${marketId}`}>
             Open replay
           </Link>
-          <div className="list-card">Backtest comparison page scaffold</div>
-          <div className="list-card">Paper trader status scaffold</div>
+          <Link className="list-card" href="/backtests">
+            Open backtests
+          </Link>
+          <Link className="list-card" href="/paper-trading">
+            Open paper trading
+          </Link>
         </div>
       </section>
 
@@ -81,6 +81,7 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
               <th>External CVD</th>
               <th>Fair Value</th>
               <th>Gap</th>
+              <th>Lead/Lag</th>
               <th>Time to close</th>
             </tr>
           </thead>
@@ -89,9 +90,10 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
               <tr key={feature.ts}>
                 <td>{new Date(feature.ts).toLocaleString()}</td>
                 <td>{feature.polymarket_cvd}</td>
-                <td>{feature.hyperliquid_cvd}</td>
+                <td>{feature.external_cvd}</td>
                 <td>{feature.fair_value_estimate?.toFixed(3) ?? "n/a"}</td>
                 <td>{feature.fair_value_gap?.toFixed(3) ?? "n/a"}</td>
+                <td>{feature.lead_lag_gap?.toFixed(3) ?? "n/a"}</td>
                 <td>{feature.time_to_close_seconds?.toFixed(0) ?? "n/a"}s</td>
               </tr>
             ))}
