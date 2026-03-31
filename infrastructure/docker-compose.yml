@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/api.Dockerfile
+    env_file:
+      - ./env/.env.example
+    volumes:
+      - ../apps/api:/app/apps/api
+      - ../services:/app/services
+      - ../packages:/app/packages
+      - ../data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  web:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/web.Dockerfile
+    env_file:
+      - ./env/.env.example
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://api:8000
+    volumes:
+      - ../apps/web:/app/apps/web
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:

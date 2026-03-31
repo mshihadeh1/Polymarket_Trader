@@ -1,0 +1,1 @@
+# Root convenience wrapper. Preferred entrypoint is `infrastructure/docker-compose.yml`.

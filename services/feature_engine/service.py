@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+from packages.core_types.schemas import FeatureSnapshot
+from packages.utils.cvd import cumulative_volume_delta, rolling_cvd, trade_imbalance
+from packages.utils.time import seconds_until
+from services.feature_engine.market_window import MarketWindowService
+from services.state import InMemoryState
+
+
+class FeatureEngineService:
+    def __init__(self, state: InMemoryState, market_window: MarketWindowService, windows: list[int]) -> None:
+        self._state = state
+        self._market_window = market_window
+        self._windows = windows
+
+    def compute_snapshot(self, market_id: str) -> FeatureSnapshot:
+        market = self._state.market_details.get(market_id)
+        if market is None:
+            raise KeyError(f"Unknown market_id={market_id}")
+        polymarket_trades = self._state.polymarket_trades.get(market_id, [])
+        hyper_trades = self._state.hyperliquid_trades.get(market_id, [])
+        orderbooks = self._state.polymarket_orderbooks.get(market_id, [])
+        current_ts = None
+        if orderbooks:
+            current_ts = orderbooks[-1].ts
+        elif polymarket_trades:
+            current_ts = polymarket_trades[-1].ts
+        else:
+            current_ts = market.opens_at
+        context = self._market_window.get_external_context(market_id)
+        top = orderbooks[-1] if orderbooks else None
+        midpoint = None
+        if top is not None:
+            midpoint = top.mid_price or (top.best_bid + top.best_ask) / 2
+        fair_value = None
+        fair_value_gap = None
+        if context.return_since_open is not None and market.price_to_beat is not None and context.current_price is not None:
+            normalized_move = (context.current_price - market.price_to_beat) / market.price_to_beat
+            fair_value = max(min(0.5 + 6 * normalized_move, 0.99), 0.01)
+            if midpoint is not None:
+                fair_value_gap = fair_value - midpoint
+        snapshot = FeatureSnapshot(
+            market_id=market.id,
+            ts=current_ts,
+            polymarket_cvd=cumulative_volume_delta(polymarket_trades),
+            polymarket_rolling_cvd=rolling_cvd(polymarket_trades, current_ts, self._windows),
+            hyperliquid_cvd=cumulative_volume_delta(hyper_trades),
+            hyperliquid_rolling_cvd=rolling_cvd(hyper_trades, current_ts, self._windows),
+            polymarket_trade_imbalance=trade_imbalance(polymarket_trades),
+            hyperliquid_trade_imbalance=trade_imbalance(hyper_trades),
+            best_bid=top.best_bid if top else None,
+            best_ask=top.best_ask if top else None,
+            spread=(top.best_ask - top.best_bid) if top else None,
+            top_of_book_imbalance=((top.bid_size - top.ask_size) / (top.bid_size + top.ask_size)) if top and (top.bid_size + top.ask_size) else None,
+            fair_value_estimate=fair_value,
+            fair_value_gap=fair_value_gap,
+            distance_to_threshold=((context.current_price - market.price_to_beat) if context.current_price and market.price_to_beat else None),
+            time_to_close_seconds=seconds_until(market.closes_at, current_ts),
+            external_return_since_open=context.return_since_open,
+        )
+        self._state.feature_snapshots.setdefault(market_id, []).append(snapshot)
+        self._state.market_details[market_id].external_context = context
+        return snapshot
+
+    def list_snapshots(self, market_id: str) -> list[FeatureSnapshot]:
+        if market_id not in self._state.feature_snapshots:
+            self.compute_snapshot(market_id)
+        return self._state.feature_snapshots.get(market_id, [])
