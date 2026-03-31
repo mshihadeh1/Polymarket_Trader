@@ -13,6 +13,15 @@ Production-minded research and trading platform scaffold for Polymarket, startin
 - Docker Compose local stack
 - Seed data and sample tests
 
+## Current build status
+
+- Phase 1: implemented as a mostly mock-first vertical slice, with a real Polymarket discovery path now available behind config and a partially working real websocket ingestion path
+- Phase 2: partially implemented with market-window alignment, local and external CVD features, and a baseline fair-value model
+- Phase 3: partially implemented with a strategy registry, stored backtest reports, and cost-aware baseline backtest scaffolding
+- Phase 4: partially implemented with paper-trading status and blotter plus execution and rules-engine scaffolds
+
+The remaining work is still explicit in code and docs: persistent historical ingestion into the full Timescale schema, richer queue and latency simulation, and a real live-paper loop.
+
 ## Monorepo layout
 
 - `apps/api`: FastAPI backend and API composition root
@@ -71,7 +80,114 @@ npm run dev
 
 ## Environment
 
-See [infrastructure/env/.env.example](C:/Users/Mahdi/Documents/Polymarket_Trader/infrastructure/env/.env.example) for supported variables. Live execution is disabled by default. Polymarket and Hyperliquid connectivity are isolated behind adapters so mock clients can be used in development and tests.
+See [infrastructure/env/.env.example](C:/Users/Mahdi/Documents/Polymarket_Trader/infrastructure/env/.env.example) for supported variables. Live execution is disabled by default. Polymarket connectivity and external historical market data are isolated behind adapters so mock clients and pluggable providers can be used in development and tests.
+
+The initial free historical provider is Binance, but downstream services consume only normalized internal bars, trades, and order book snapshots. Provider selection is configuration-driven so future sources such as Tardis, Parquet, or custom datasets do not require replay or strategy rewrites.
+
+## External Market Data Providers
+
+The external historical market data path now uses a provider interface in [packages/clients/market_data_provider/base.py](C:/Users/Mahdi/Documents/Polymarket_Trader/packages/clients/market_data_provider/base.py).
+
+- Provider interface: `HistoricalMarketDataProvider`
+- Normalized internal models: `OHLCVBar`, `ExternalTrade`, `ExternalOrderBookSnapshot`, `ProviderCapabilities`
+- Provider selection: `EXTERNAL_HISTORICAL_PROVIDER=binance`
+- Symbol mapping: `EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT"}`
+
+Current provider support:
+- `binance`: implemented for historical 1-minute OHLCV, with trades and snapshots available as provider methods
+- `tardis`: placeholder scaffold
+- `parquet`: placeholder scaffold
+
+The application stores both raw provider payloads and normalized records in the in-memory runtime state. Downstream modules consume only normalized internal models.
+
+## Real Polymarket Observation Mode
+
+The repo now supports a narrow real Polymarket observation mode behind config while preserving the mock path for fallback.
+
+Config:
+
+```bash
+USE_MOCK_POLYMARKET_CLIENT=false
+POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
+POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
+```
+
+Current real Polymarket status:
+- real discovery from Gamma works and populates market state
+- real markets are classified into short-horizon crypto buckets and exposed through the existing market endpoints
+- the websocket path is supervised for long observation runs with reconnect counters, last-event timestamps, and dropped/duplicate event tracking
+- raw websocket payloads are stored before normalization
+- the UI exposes live observation status and quick-launch links for BTC 5m and BTC 15m markets
+
+Known limitations / TODOs:
+- the websocket adapter currently handles only a narrow set of market-channel events: `last_trade_price`, `price_change`, `best_bid_ask`, and `book`
+- this is observation-grade hardening, not trading-grade hardening
+- some Polymarket feed fields are normalized defensively because public docs are not exhaustive for every event variant
+- this slice focuses on live ingestion and in-memory/runtime persistence, not full Timescale historical persistence yet
+
+## 2-4 Hour Observation Runbook
+
+Use this flow when you want to observe real Polymarket BTC 5m and BTC 15m markets for a few hours.
+
+1. Configure real Polymarket mode in `.env`:
+
+```bash
+USE_MOCK_POLYMARKET=false
+USE_MOCK_POLYMARKET_CLIENT=false
+USE_MOCK_EXTERNAL_PROVIDER=true
+ENABLE_DB_PERSISTENCE=false
+POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
+POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
+```
+
+2. Start the API:
+
+```bash
+cd apps/api
+uvicorn polymarket_trader.main:app --reload --port 8000
+```
+
+3. Start the web app:
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+4. Open the dashboard at `http://localhost:3000`.
+
+5. Use the `BTC 5m` and `BTC 15m` quick-launch cards on the dashboard to open one market detail page for each family.
+
+6. Keep the following visible during the session:
+- dashboard observation status card
+- reconnect count
+- last-event time
+- dropped / duplicate counts
+- the selected BTC 5m and BTC 15m market detail pages
+
+7. If the websocket falls behind, reload the dashboard and check:
+- `live feed` / `websocket connected` badges
+- `last event` freshness
+- `dropped / duplicate` counts
+- API `GET /api/v1/system/health`
+
+8. If you need to reset the in-memory session during observation:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/ingestion/bootstrap
+```
+
+This runbook is meant for venue observation and data inspection only. It does not imply live trading readiness.
+
+Optional local persistence for feature snapshots, backtest reports, and paper decisions can be enabled with:
+
+```bash
+ENABLE_DB_PERSISTENCE=true
+SQLITE_FALLBACK_PATH=data/polymarket_trader.db
+```
+
+That persistence layer is a local development helper, not a claim that the full Timescale ingestion path is already finished.
 
 ## Phase 1 API endpoints
 
@@ -85,10 +201,22 @@ See [infrastructure/env/.env.example](C:/Users/Mahdi/Documents/Polymarket_Trader
 - `POST /api/v1/ingestion/bootstrap`
 - `GET /api/v1/strategies`
 - `POST /api/v1/backtests/{market_id}`
+- `GET /api/v1/backtests`
+- `GET /api/v1/backtests/{run_id}`
 - `GET /api/v1/paper-trading/blotter`
+- `GET /api/v1/paper-trading/status`
+- `POST /api/v1/paper-trading/run/{market_id}`
 - `GET /api/v1/risk/settings`
 - `GET /api/v1/execution/status`
 - `GET /api/v1/system/health`
+
+## Web pages
+
+- `/`: active market dashboard
+- `/markets/[marketId]`: market detail with local and external context plus feature panel
+- `/replay`: historical replay viewer
+- `/backtests`: backtest results and strategy list
+- `/paper-trading`: paper blotter and strategy status
 
 ## Testing
 
@@ -98,7 +226,8 @@ python -m pytest apps/api/tests tests
 
 ## Notes
 
-- The current Polymarket and Hyperliquid integration paths are intentionally mock-first.
+- Hyperliquid remains mock-first in the current app bootstrap.
+- Polymarket is no longer code-only mock-first: real discovery works behind config, but the live websocket ingestion path still needs hardening before it can be called end-to-end working.
 - Live order routing is not implemented and all execution paths remain dry-run only.
 - Weather and other market types are reflected in the schema and interfaces, but their specialized models and rule parsing land in later phases.
 - The current backtester is a Phase 1 scaffold that exposes result shapes and feature hooks without claiming full queue-position realism yet.

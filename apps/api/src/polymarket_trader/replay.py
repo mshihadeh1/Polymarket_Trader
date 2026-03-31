@@ -32,20 +32,20 @@ class ReplayService:
                     payload=trade.model_dump(mode="json"),
                 )
             )
-        for snapshot in self._state.hyperliquid_orderbooks.get(market_id, []):
+        for snapshot in self._state.external_orderbooks.get(market_id, []):
             events.append(
                 ReplayEvent(
                     ts=snapshot.ts,
-                    venue="hyperliquid",
+                    venue=snapshot.venue,
                     event_type="orderbook",
                     payload=snapshot.model_dump(mode="json"),
                 )
             )
-        for trade in self._state.hyperliquid_trades.get(market_id, []):
+        for trade in self._state.external_trades.get(market_id, []):
             events.append(
                 ReplayEvent(
                     ts=trade.ts,
-                    venue="hyperliquid",
+                    venue=trade.venue,
                     event_type="trade",
                     payload=trade.model_dump(mode="json"),
                 )

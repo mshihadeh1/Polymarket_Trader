@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { fetchMarkets, fetchPaperBlotter } from "../lib/api";
+import { fetchMarkets, fetchPaperBlotter, fetchSystemHealth } from "../lib/api";
 
 function formatTime(value?: string): string {
   if (!value) return "n/a";
@@ -8,56 +8,207 @@ function formatTime(value?: string): string {
 }
 
 export async function MarketDashboard() {
-  const [markets, blotter] = await Promise.all([fetchMarkets(), fetchPaperBlotter()]);
+  const [markets, blotter, health] = await Promise.all([
+    fetchMarkets(),
+    fetchPaperBlotter(),
+    fetchSystemHealth(),
+  ]);
+  const liveMarkets = markets.filter((market) => market.status === "active");
+  const crypto5m = markets.filter((market) => market.market_type === "crypto_5m").length;
+  const crypto15m = markets.filter((market) => market.market_type === "crypto_15m").length;
+  const btc5mMarket = markets.find((market) => market.underlying === "BTC" && market.market_type === "crypto_5m");
+  const btc15mMarket = markets.find((market) => market.underlying === "BTC" && market.market_type === "crypto_15m");
+  const observation = health.polymarket_observation;
 
   return (
-    <div className="page-grid">
-      <section className="panel hero">
-        <div>
-          <p className="eyebrow">Research-first Polymarket platform</p>
-          <h1>Active market monitor</h1>
-          <p className="muted">
-            Phase 1 focuses on ingesting active crypto markets, storing replayable
-            event history, and giving the desk a clean operator view.
-          </p>
+    <div className="page-grid page-shell">
+      <section className="panel hero span-2">
+        <div className="hero-grid">
+          <div className="hero-copy">
+            <div className="stack">
+              <p className="eyebrow">Research-first Polymarket platform</p>
+              <div className="hero-title-row">
+                <h1>
+                  Crypto microstructure
+                  <br />
+                  <span className="accent-text">research terminal</span>
+                </h1>
+                <div className="badge-stack">
+                  <span className={`badge ${health.mock_polymarket ? "badge-mock" : "badge-real"}`}>
+                    {health.mock_polymarket ? "mock venue" : "real venue"}
+                  </span>
+                  <span className="badge badge-provider">{health.polymarket_client}</span>
+                </div>
+              </div>
+              <p className="muted">
+                Monitor active Polymarket contracts, inspect local order flow, and keep replay,
+                paper trading, and backtests inside one dark trading workspace.
+              </p>
+            </div>
+            <div className="pill-row">
+              <span className="pill pill-blue">Active markets {liveMarkets.length}</span>
+              <span className="pill pill-purple">Crypto 5m {crypto5m}</span>
+              <span className="pill pill-teal">Crypto 15m {crypto15m}</span>
+            </div>
+          </div>
+
+          <div className="stack">
+            <div className="metric-card">
+              <span className="metric-label">Venue state</span>
+              <span className="metric-value">{health.status}</span>
+              <span className="muted">Clear source badges show when the desk is in mock mode versus a real venue path.</span>
+            </div>
+            <div className="kpi-strip">
+              <div className="kpi">
+                <span className="metric-label">Markets loaded</span>
+                <strong>{health.markets_loaded}</strong>
+              </div>
+              <div className="kpi">
+                <span className="metric-label">Source mode</span>
+                <strong>{health.mock_polymarket ? "Mock" : "Real"}</strong>
+              </div>
+              <div className="kpi">
+                <span className="metric-label">Paper fills</span>
+                <strong>{blotter.length}</strong>
+              </div>
+            </div>
+            <div className="badge-stack">
+              <span className={`badge ${observation.websocket_connected ? "badge-live" : "badge-pending"}`}>
+                {observation.websocket_connected ? "websocket connected" : "awaiting live stream"}
+              </span>
+              <span className="badge badge-provider">reconnects {observation.reconnect_count}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Observation status</h2>
+          <p className="muted">Live-session health for a multi-hour monitoring run.</p>
+        </div>
+        <div className="stack">
+          <div className="signal-card">
+            <span className="metric-label">Polymarket client</span>
+            <strong>{health.polymarket_client}</strong>
+            <div className="badge-stack">
+              <span className={`badge ${health.mock_polymarket ? "badge-mock" : "badge-live"}`}>
+                {health.mock_polymarket ? "mock feed" : "live feed"}
+              </span>
+              <span className="badge badge-historical">historical + replay</span>
+            </div>
+          </div>
+          <div className="signal-card">
+            <span className="metric-label">Last event</span>
+            <strong>{observation.last_event_at ? formatTime(observation.last_event_at) : "none yet"}</strong>
+            <span className="muted">
+              raw {observation.raw_event_count} | trades {observation.trade_event_count} | books {observation.book_event_count}
+            </span>
+          </div>
+          <div className="signal-card">
+            <span className="metric-label">Dropped / duplicate</span>
+            <strong>{observation.dropped_event_count} / {observation.duplicate_event_count}</strong>
+            <span className="muted">{observation.last_error ?? "No recent stream errors."}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>BTC quick launch</h2>
+          <p className="muted">One-click entry points for the two market families we want to observe live.</p>
+        </div>
+        <div className="stack">
+          {btc5mMarket ? (
+            <Link className="list-card" href={`/markets/${btc5mMarket.id}`}>
+              <div className="badge-stack">
+                <span className="badge badge-type">BTC 5m</span>
+                <span className={`badge ${btc5mMarket.source === "real" ? "badge-real" : "badge-mock"}`}>
+                  {btc5mMarket.source ?? "unknown"}
+                </span>
+              </div>
+              <strong>{btc5mMarket.title}</strong>
+              <span className="muted">Observe the live market detail panel.</span>
+            </Link>
+          ) : (
+            <div className="empty-state">No BTC 5m market currently loaded.</div>
+          )}
+          {btc15mMarket ? (
+            <Link className="list-card" href={`/markets/${btc15mMarket.id}`}>
+              <div className="badge-stack">
+                <span className="badge badge-type">BTC 15m</span>
+                <span className={`badge ${btc15mMarket.source === "real" ? "badge-real" : "badge-mock"}`}>
+                  {btc15mMarket.source ?? "unknown"}
+                </span>
+              </div>
+              <strong>{btc15mMarket.title}</strong>
+              <span className="muted">Keep this open in a second tab during the observation run.</span>
+            </Link>
+          ) : (
+            <div className="empty-state">No BTC 15m market currently loaded.</div>
+          )}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Desk focus</h2>
+          <p className="muted">Observation mode stays centered on short-horizon crypto flow.</p>
+        </div>
+        <div className="stack">
+          <div className="signal-card">
+            <span className="metric-label">Selected markets</span>
+            <strong>{observation.selected_market_count}</strong>
+            <span className="muted">Assets subscribed: {observation.selected_asset_count}</span>
+          </div>
         </div>
       </section>
 
       <section className="panel span-2">
         <div className="section-head">
           <h2>Active markets</h2>
-          <p className="muted">Filter-ready table grouped for crypto 5m and 15m flows.</p>
+          <p className="muted">Current Polymarket contracts with quick access into detail and replay.</p>
         </div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Market</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Close</th>
-              <th>Replay</th>
-            </tr>
-          </thead>
-          <tbody>
-            {markets.map((market) => (
-              <tr key={market.id}>
-                <td>
-                  <strong>{market.title}</strong>
-                  <div className="table-meta">{market.tags.join(" • ")}</div>
-                </td>
-                <td>{market.market_type}</td>
-                <td>{market.status}</td>
-                <td>{formatTime(market.closes_at)}</td>
-                <td>
-                  <div className="action-links">
-                    <Link href={`/markets/${market.id}`}>Inspect</Link>
-                    <Link href={`/replay?marketId=${market.id}`}>Replay</Link>
-                  </div>
-                </td>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Market</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Close</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {markets.map((market) => (
+                <tr key={market.id}>
+                  <td>
+                    <div className="market-title-cell">
+                      <span className="market-name">{market.title}</span>
+                      <div className="badge-stack">
+                        <span className="badge badge-type">{market.market_type}</span>
+                        <span className={`badge ${market.source === "real" ? "badge-real" : "badge-mock"}`}>
+                          {market.source ?? "unknown"}
+                        </span>
+                      </div>
+                      <div className="table-meta">{market.tags.join(" | ")}</div>
+                    </div>
+                  </td>
+                  <td>{market.market_type}</td>
+                  <td>{market.status}</td>
+                  <td>{formatTime(market.closes_at)}</td>
+                  <td>
+                    <div className="table-actions">
+                      <Link className="terminal-link" href={`/markets/${market.id}`}>Inspect</Link>
+                      <Link className="terminal-link" href={`/replay?marketId=${market.id}`}>Replay</Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="panel">
@@ -68,11 +219,11 @@ export async function MarketDashboard() {
         <div className="stack">
           {blotter.map((item) => (
             <div className="list-card" key={`${item.market_id}-${item.ts}`}>
-              <strong>{item.action}</strong>
-              <span>{item.side}</span>
-              <span>
-                {item.size} @ {item.price.toFixed(2)}
-              </span>
+              <div className="badge-stack">
+                <span className={`badge ${item.side === "buy" ? "badge-buy" : "badge-sell"}`}>{item.side}</span>
+                <span className="badge badge-provider">{item.action}</span>
+              </div>
+              <strong>{item.size} @ {item.price.toFixed(2)}</strong>
               <span className="muted">{formatTime(item.ts)}</span>
             </div>
           ))}
@@ -82,15 +233,21 @@ export async function MarketDashboard() {
       <section className="panel">
         <div className="section-head">
           <h2>Operator panels</h2>
-          <p className="muted">UI placeholders are wired for upcoming Phase 2 and 3 pages.</p>
+          <p className="muted">Research workflow shortcuts for detail, replay, backtests, and paper trading.</p>
         </div>
         <div className="stack">
-          <div className="list-card">Order book view</div>
-          <div className="list-card">Recent trades view</div>
-          <div className="list-card">Fair value vs market price chart</div>
-          <div className="list-card">Feature panel</div>
-          <div className="list-card">Strategy signals panel</div>
-          <div className="list-card">Backtest results page</div>
+          <Link className="list-card" href="/backtests">
+            <strong>Backtest lab</strong>
+            <span className="muted">Compare baseline reports and strategy families side by side.</span>
+          </Link>
+          <Link className="list-card" href="/paper-trading">
+            <strong>Paper blotter</strong>
+            <span className="muted">Track decisions, fills, and dry-run exposure.</span>
+          </Link>
+          <div className="list-card">
+            <strong>Order-flow monitor</strong>
+            <span className="muted">Market detail pages surface top-of-book, recent trades, and feature context.</span>
+          </div>
         </div>
       </section>
     </div>

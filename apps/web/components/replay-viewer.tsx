@@ -7,6 +7,7 @@ type ReplayViewerProps = {
 export async function ReplayViewer({ marketId }: ReplayViewerProps) {
   const markets = await fetchMarkets();
   const selectedMarketId = marketId ?? markets[0]?.id;
+  const selectedMarket = markets.find((market) => market.id === selectedMarketId);
 
   if (!selectedMarketId) {
     return <div className="panel">No replayable markets available.</div>;
@@ -15,13 +16,20 @@ export async function ReplayViewer({ marketId }: ReplayViewerProps) {
   const replay = await fetchReplay(selectedMarketId);
 
   return (
-    <div className="page-grid">
+    <div className="page-grid page-shell">
       <section className="panel span-2">
         <div className="section-head">
-          <h1>Historical replay</h1>
-          <p className="muted">
-            Event timeline for market <code>{selectedMarketId}</code>.
-          </p>
+          <p className="eyebrow">Replay terminal</p>
+          <div className="hero-title-row">
+            <h1>{selectedMarket?.title ?? "Historical replay"}</h1>
+            <div className="badge-stack">
+              <span className="badge badge-type">{selectedMarket?.market_type ?? "replay"}</span>
+              <span className={`badge ${selectedMarket?.source === "real" ? "badge-real" : "badge-mock"}`}>
+                {selectedMarket?.source ?? "unknown"}
+              </span>
+            </div>
+          </div>
+          <p className="muted">Event timeline for market <span className="mono">{selectedMarketId}</span>.</p>
         </div>
         <div className="timeline-controls">
           <button type="button">Play</button>
@@ -31,9 +39,14 @@ export async function ReplayViewer({ marketId }: ReplayViewerProps) {
         <div className="timeline">
           {replay.events.map((event, index) => (
             <div className="timeline-row" key={`${event.ts}-${index}`}>
-              <div>
-                <strong>{event.event_type}</strong>
-                <div className="table-meta">{new Date(event.ts).toLocaleString()}</div>
+              <div className="timeline-meta">
+                <span className="event-type">{event.event_type}</span>
+                <div className="badge-stack">
+                  <span className={`badge ${event.venue === "polymarket" ? "badge-real" : "badge-provider"}`}>
+                    {event.venue}
+                  </span>
+                  <span className="badge badge-historical">{new Date(event.ts).toLocaleString()}</span>
+                </div>
               </div>
               <pre>{JSON.stringify(event.payload, null, 2)}</pre>
             </div>
@@ -47,9 +60,18 @@ export async function ReplayViewer({ marketId }: ReplayViewerProps) {
           <p className="muted">Designed for future signal and execution overlays.</p>
         </div>
         <div className="stack">
-          <div className="list-card">Signal decision lane</div>
-          <div className="list-card">Execution decision lane</div>
-          <div className="list-card">Feature snapshot lane</div>
+          <div className="list-card">
+            <strong>Signal lane</strong>
+            <span className="muted">Future model scores and trigger overlays will sit here.</span>
+          </div>
+          <div className="list-card">
+            <strong>Execution lane</strong>
+            <span className="muted">Fill simulation and order decisions can be layered onto the same timeline.</span>
+          </div>
+          <div className="list-card">
+            <strong>Feature lane</strong>
+            <span className="muted">Snapshot overlays will stay visually separate from raw market events.</span>
+          </div>
         </div>
       </section>
     </div>
