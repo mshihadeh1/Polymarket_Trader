@@ -15,7 +15,7 @@ Production-minded research and trading platform scaffold for Polymarket, startin
 
 ## Current build status
 
-- Phase 1: implemented as a mock-first vertical slice with Polymarket and Hyperliquid ingestion, replay, and dashboard pages
+- Phase 1: implemented as a mostly mock-first vertical slice, with a real Polymarket discovery path now available behind config and a partially working real websocket ingestion path
 - Phase 2: partially implemented with market-window alignment, local and external CVD features, and a baseline fair-value model
 - Phase 3: partially implemented with a strategy registry, stored backtest reports, and cost-aware baseline backtest scaffolding
 - Phase 4: partially implemented with paper-trading status and blotter plus execution and rules-engine scaffolds
@@ -102,7 +102,7 @@ The application stores both raw provider payloads and normalized records in the 
 
 ## Real Polymarket Ingestion
 
-The repo now supports a narrow real Polymarket vertical slice for market discovery and live market data ingestion while preserving the mock path for fallback.
+The repo now supports a narrow real Polymarket path behind config while preserving the mock path for fallback.
 
 Config:
 
@@ -112,16 +112,16 @@ POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
 POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
 ```
 
-Current real Polymarket scope:
-- discover active markets from Gamma
-- classify and keep BTC 5m / 15m crypto markets
-- subscribe to live market-channel updates for selected token ids
-- normalize trades and top-of-book/order-book updates
-- store both raw event envelopes and normalized records
-- expose the data through the existing market, trades, orderbook, and replay endpoints
+Current real Polymarket status:
+- real discovery from Gamma works and populates market state
+- real markets are classified into short-horizon crypto buckets and exposed through the existing market endpoints
+- the websocket path connects and receives real market events
+- raw websocket payloads are stored before normalization
+- normalized Polymarket order-book and trade records are only partially working in real mode today
 
 Known limitations / TODOs:
-- the websocket adapter currently handles the narrow set of market-channel events used for this slice: `last_trade_price`, `price_change`, `best_bid_ask`, and `book`
+- the websocket adapter currently handles only a narrow set of market-channel events: `last_trade_price`, `price_change`, `best_bid_ask`, and `book`
+- the real websocket path is not yet end-to-end reliable: during a live validation run on March 31, 2026 it received real events and then failed on an unexpected `book` payload shape in top-of-book normalization
 - some Polymarket feed fields are normalized defensively because public docs are not exhaustive for every event variant
 - this slice focuses on live ingestion and in-memory/runtime persistence, not full Timescale historical persistence yet
 
@@ -171,7 +171,8 @@ python -m pytest apps/api/tests tests
 
 ## Notes
 
-- The current Polymarket and Hyperliquid integration paths are intentionally mock-first.
+- Hyperliquid remains mock-first in the current app bootstrap.
+- Polymarket is no longer code-only mock-first: real discovery works behind config, but the live websocket ingestion path still needs hardening before it can be called end-to-end working.
 - Live order routing is not implemented and all execution paths remain dry-run only.
 - Weather and other market types are reflected in the schema and interfaces, but their specialized models and rule parsing land in later phases.
 - The current backtester is a Phase 1 scaffold that exposes result shapes and feature hooks without claiming full queue-position realism yet.
