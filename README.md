@@ -100,6 +100,31 @@ Current provider support:
 
 The application stores both raw provider payloads and normalized records in the in-memory runtime state. Downstream modules consume only normalized internal models.
 
+## Real Polymarket Ingestion
+
+The repo now supports a narrow real Polymarket vertical slice for market discovery and live market data ingestion while preserving the mock path for fallback.
+
+Config:
+
+```bash
+USE_MOCK_POLYMARKET_CLIENT=false
+POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
+POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
+```
+
+Current real Polymarket scope:
+- discover active markets from Gamma
+- classify and keep BTC 5m / 15m crypto markets
+- subscribe to live market-channel updates for selected token ids
+- normalize trades and top-of-book/order-book updates
+- store both raw event envelopes and normalized records
+- expose the data through the existing market, trades, orderbook, and replay endpoints
+
+Known limitations / TODOs:
+- the websocket adapter currently handles the narrow set of market-channel events used for this slice: `last_trade_price`, `price_change`, `best_bid_ask`, and `book`
+- some Polymarket feed fields are normalized defensively because public docs are not exhaustive for every event variant
+- this slice focuses on live ingestion and in-memory/runtime persistence, not full Timescale historical persistence yet
+
 Optional local persistence for feature snapshots, backtest reports, and paper decisions can be enabled with:
 
 ```bash

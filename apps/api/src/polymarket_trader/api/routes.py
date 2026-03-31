@@ -65,7 +65,7 @@ def build_router(container: Container) -> APIRouter:
 
     @router.post("/ingestion/bootstrap")
     def bootstrap():
-        count = container.bootstrap_seed_data(force_reload=True)
+        count = container.bootstrap_seed_data_sync(force_reload=True)
         return {"markets_loaded": count}
 
     @router.get("/strategies")
@@ -133,7 +133,8 @@ def build_router(container: Container) -> APIRouter:
         return {
             "status": "ok",
             "markets_loaded": len(container.state.markets),
-            "mock_polymarket": container.settings.use_mock_polymarket,
+            "mock_polymarket": container.polymarket_client.is_mock,
+            "polymarket_client": container.polymarket_client.client_name,
             "external_historical_provider": container.settings.external_historical_provider,
             "mock_external_provider": container.settings.use_mock_external_provider,
             "external_provider_capabilities": container.external_market_data_provider.capabilities(),

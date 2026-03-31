@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { fetchMarkets, fetchPaperBlotter } from "../lib/api";
+import { fetchMarkets, fetchPaperBlotter, fetchSystemHealth } from "../lib/api";
 
 function formatTime(value?: string): string {
   if (!value) return "n/a";
@@ -8,7 +8,11 @@ function formatTime(value?: string): string {
 }
 
 export async function MarketDashboard() {
-  const [markets, blotter] = await Promise.all([fetchMarkets(), fetchPaperBlotter()]);
+  const [markets, blotter, health] = await Promise.all([
+    fetchMarkets(),
+    fetchPaperBlotter(),
+    fetchSystemHealth(),
+  ]);
 
   return (
     <div className="page-grid">
@@ -19,6 +23,9 @@ export async function MarketDashboard() {
           <p className="muted">
             Phase 1 focuses on ingesting active crypto markets, storing replayable
             event history, and giving the desk a clean operator view.
+          </p>
+          <p className="muted">
+            Polymarket source: {health.mock_polymarket ? "mock" : "real"} ({health.polymarket_client})
           </p>
         </div>
       </section>
@@ -44,6 +51,7 @@ export async function MarketDashboard() {
                 <td>
                   <strong>{market.title}</strong>
                   <div className="table-meta">{market.tags.join(" • ")}</div>
+                  <div className="table-meta">source: {market.source ?? "unknown"}</div>
                 </td>
                 <td>{market.market_type}</td>
                 <td>{market.status}</td>

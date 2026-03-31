@@ -35,6 +35,7 @@ class MarketSummary(BaseModel):
     price_to_beat: float | None = None
     open_reference_price: float | None = None
     external_provider: str | None = None
+    source: str | None = None
     tags: list[str] = Field(default_factory=list)
     tokens: list[MarketToken] = Field(default_factory=list)
 
@@ -116,6 +117,70 @@ class ExternalContext(BaseModel):
     current_price: float | None = None
     return_since_open: float | None = None
     time_to_close_seconds: float | None = None
+
+
+class RawPolymarketEvent(BaseModel):
+    event_type: str
+    asset_id: str
+    market: str
+    timestamp: datetime
+    sequence: str | None = None
+    payload: dict[str, Any]
+
+
+class PolymarketMarketMetadata(BaseModel):
+    market_id: str
+    condition_id: str
+    slug: str | None = None
+    question: str | None = None
+    category: str | None = None
+    active: bool = False
+    closed: bool = False
+    accepting_orders: bool = False
+    enable_order_book: bool = False
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    resolution_source: str | None = None
+    description: str | None = None
+    outcomes: list[str] = Field(default_factory=list)
+    outcome_prices: list[float] = Field(default_factory=list)
+    token_ids: list[str] = Field(default_factory=list)
+    best_bid: float | None = None
+    best_ask: float | None = None
+    last_trade_price: float | None = None
+    raw_tags: list[str] = Field(default_factory=list)
+
+
+class PolymarketTrade(BaseModel):
+    market_id: str
+    asset_id: str
+    ts: datetime
+    sequence: str | None = None
+    price: float
+    size: float
+    side: Literal["buy", "sell"]
+    fee_rate_bps: float | None = None
+
+
+class PolymarketTopOfBook(BaseModel):
+    market_id: str
+    asset_id: str
+    ts: datetime
+    sequence: str | None = None
+    best_bid: float
+    best_ask: float
+    spread: float | None = None
+
+
+class PolymarketOrderBookUpdate(BaseModel):
+    market_id: str
+    asset_id: str
+    ts: datetime
+    sequence: str | None = None
+    best_bid: float | None = None
+    best_ask: float | None = None
+    bids: list[list[float]] = Field(default_factory=list)
+    asks: list[list[float]] = Field(default_factory=list)
 
 
 class FeatureSnapshot(BaseModel):

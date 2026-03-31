@@ -3,6 +3,7 @@
 ## Research-first flow
 
 1. `services/polymarket_ingestor` loads market metadata, order books, trades, and raw events.
+   It can now use either the mock Polymarket client or the real Gamma + market-websocket client path.
 2. `packages/clients/market_data_provider` defines the provider-pluggable historical market data interface and Binance-first implementation.
 3. `services/hyperliquid_ingestor` currently acts as the external market data ingestor and loads normalized external bars, order books, trades, and raw payloads aligned by Polymarket market id.
 4. `services/feature_engine/market_window.py` maps a Polymarket market to its external open/current context.

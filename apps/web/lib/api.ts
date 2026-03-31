@@ -7,6 +7,7 @@ export type Market = {
   market_type: string;
   underlying?: string;
   status: string;
+  source?: string;
   tags: string[];
   closes_at?: string;
   price_to_beat?: number;
@@ -18,6 +19,24 @@ export type ReplayEvent = {
   venue: string;
   event_type: "orderbook" | "trade" | "raw";
   payload: Record<string, unknown>;
+};
+
+export type VenueTrade = {
+  ts: string;
+  venue: string;
+  symbol?: string;
+  price: number;
+  size: number;
+  side: "buy" | "sell";
+};
+
+export type VenueOrderBook = {
+  ts: string;
+  venue: string;
+  best_bid: number;
+  best_ask: number;
+  bid_size: number;
+  ask_size: number;
 };
 
 export type FeatureSnapshot = {
@@ -114,6 +133,47 @@ export async function fetchFeatures(marketId: string): Promise<FeatureSnapshot[]
   });
   if (!response.ok) {
     throw new Error("Failed to fetch features");
+  }
+  return response.json();
+}
+
+export async function fetchTrades(marketId: string): Promise<{
+  polymarket: VenueTrade[];
+  external: VenueTrade[];
+}> {
+  const response = await fetch(`${baseUrl}/api/v1/markets/${marketId}/trades`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch trades");
+  }
+  return response.json();
+}
+
+export async function fetchOrderBook(marketId: string): Promise<{
+  polymarket: VenueOrderBook[];
+  external: VenueOrderBook[];
+}> {
+  const response = await fetch(`${baseUrl}/api/v1/markets/${marketId}/orderbook`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch order book");
+  }
+  return response.json();
+}
+
+export async function fetchSystemHealth(): Promise<{
+  status: string;
+  markets_loaded: number;
+  mock_polymarket: boolean;
+  polymarket_client: string;
+}> {
+  const response = await fetch(`${baseUrl}/api/v1/system/health`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch system health");
   }
   return response.json();
 }

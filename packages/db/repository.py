@@ -5,8 +5,25 @@ import logging
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
-from packages.core_types.schemas import BacktestMetric, BacktestReport, FeatureSnapshot, PaperTradeDecision
-from packages.db.models import BacktestRunRecord, FeatureSnapshotRecord, PaperDecisionRecord
+from packages.core_types.schemas import (
+    BacktestMetric,
+    BacktestReport,
+    FeatureSnapshot,
+    MarketSummary,
+    PaperTradeDecision,
+    PolymarketTopOfBook,
+    PolymarketTrade,
+    RawPolymarketEvent,
+)
+from packages.db.models import (
+    BacktestRunRecord,
+    FeatureSnapshotRecord,
+    PaperDecisionRecord,
+    PolymarketBookRecord,
+    PolymarketMarketRecord,
+    PolymarketRawEventRecord,
+    PolymarketTradeRecord,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +94,59 @@ class ResearchPersistence:
             )
             for row in rows
         ]
+
+    def save_market_summary(self, market: MarketSummary) -> None:
+        if not self._session_factory:
+            return
+        record = PolymarketMarketRecord(
+            id=str(market.id),
+            slug=market.slug,
+            market_type=market.market_type,
+            underlying=market.underlying,
+            source=market.source or "unknown",
+            payload=market.model_dump(mode="json"),
+        )
+        self._write(record, merge=True)
+
+    def save_polymarket_trade(self, trade: PolymarketTrade) -> None:
+        if not self._session_factory:
+            return
+        key = trade.sequence or f"{trade.market_id}:{trade.asset_id}:{trade.ts.isoformat()}:{trade.price}:{trade.size}"
+        record = PolymarketTradeRecord(
+            id=key,
+            market_id=trade.market_id,
+            asset_id=trade.asset_id,
+            ts=trade.ts,
+            payload=trade.model_dump(mode="json"),
+        )
+        self._write(record, merge=True)
+
+    def save_polymarket_top_of_book(self, top: PolymarketTopOfBook) -> None:
+        if not self._session_factory:
+            return
+        key = top.sequence or f"{top.market_id}:{top.asset_id}:{top.ts.isoformat()}"
+        record = PolymarketBookRecord(
+            id=key,
+            market_id=top.market_id,
+            asset_id=top.asset_id,
+            ts=top.ts,
+            payload=top.model_dump(mode="json"),
+        )
+        self._write(record, merge=True)
+
+    def save_polymarket_raw_event(self, event: RawPolymarketEvent, market_id: str) -> None:
+        if not self._session_factory:
+            return
+        key = event.sequence or f"{market_id}:{event.asset_id}:{event.timestamp.isoformat()}:{event.event_type}"
+        record = PolymarketRawEventRecord(
+            id=key,
+            market_id=market_id,
+            asset_id=event.asset_id,
+            event_type=event.event_type,
+            ts=event.timestamp,
+            payload=event.model_dump(mode="json"),
+        )
+        self._write(record, merge=True)
 
     def _write(self, record: object, merge: bool = False) -> None:
         try:

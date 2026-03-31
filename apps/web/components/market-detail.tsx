@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { fetchFeatures, fetchMarketDetail } from "../lib/api";
+import { fetchFeatures, fetchMarketDetail, fetchOrderBook, fetchTrades } from "../lib/api";
 
 function pct(value?: number): string {
   if (value === undefined || value === null) return "n/a";
@@ -8,11 +8,15 @@ function pct(value?: number): string {
 }
 
 export async function MarketDetail({ marketId }: { marketId: string }) {
-  const [market, features] = await Promise.all([
+  const [market, features, trades, orderbook] = await Promise.all([
     fetchMarketDetail(marketId),
     fetchFeatures(marketId),
+    fetchTrades(marketId),
+    fetchOrderBook(marketId),
   ]);
   const latestFeature = features.at(-1);
+  const recentTrades = trades.polymarket.slice(-10).reverse();
+  const latestBook = orderbook.polymarket.at(-1);
 
   return (
     <div className="page-grid">
@@ -24,17 +28,13 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
             Underlying {market.underlying} • strike {market.price_to_beat ?? "n/a"} • close{" "}
             {market.closes_at ? new Date(market.closes_at).toLocaleString() : "n/a"}
           </p>
+          <p className="muted">Polymarket source: {market.source ?? "unknown"}</p>
         </div>
         <div className="detail-grid">
           <div className="list-card">
-            <strong>Polymarket</strong>
+            <strong>Polymarket top of book</strong>
             <span>
-              {market.latest_polymarket_orderbook?.best_bid?.toFixed(2)} /{" "}
-              {market.latest_polymarket_orderbook?.best_ask?.toFixed(2)}
-            </span>
-            <span className="muted">
-              size {market.latest_polymarket_orderbook?.bid_size} x{" "}
-              {market.latest_polymarket_orderbook?.ask_size}
+              {latestBook?.best_bid?.toFixed(2) ?? "n/a"} / {latestBook?.best_ask?.toFixed(2) ?? "n/a"}
             </span>
           </div>
           <div className="list-card">
@@ -48,6 +48,21 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
             <span>External CVD {latestFeature?.external_cvd ?? "n/a"}</span>
             <span className="muted">Fair-value gap {pct(latestFeature?.fair_value_gap)}</span>
           </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Recent trades</h2>
+        </div>
+        <div className="stack">
+          {recentTrades.map((trade, index) => (
+            <div className="list-card" key={`${trade.ts}-${index}`}>
+              <strong>{trade.side}</strong>
+              <span>{trade.size} @ {trade.price.toFixed(3)}</span>
+              <span className="muted">{new Date(trade.ts).toLocaleString()}</span>
+            </div>
+          ))}
         </div>
       </section>
 

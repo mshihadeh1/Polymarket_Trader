@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from packages.config import get_settings
@@ -11,10 +13,22 @@ settings = get_settings()
 configure_logging(settings.log_level)
 container = build_container(settings)
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await container.bootstrap_seed_data()
+    await container.start_background_tasks()
+    try:
+        yield
+    finally:
+        await container.stop_background_tasks()
+
+
 app = FastAPI(
     title="Polymarket Trader API",
     version="0.1.0",
     description="Research-first Polymarket trading platform Phase 1 API",
+    lifespan=lifespan,
 )
 
 
