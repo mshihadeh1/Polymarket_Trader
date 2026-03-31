@@ -16,6 +16,9 @@ export async function MarketDashboard() {
   const liveMarkets = markets.filter((market) => market.status === "active");
   const crypto5m = markets.filter((market) => market.market_type === "crypto_5m").length;
   const crypto15m = markets.filter((market) => market.market_type === "crypto_15m").length;
+  const btc5mMarket = markets.find((market) => market.underlying === "BTC" && market.market_type === "crypto_5m");
+  const btc15mMarket = markets.find((market) => market.underlying === "BTC" && market.market_type === "crypto_15m");
+  const observation = health.polymarket_observation;
 
   return (
     <div className="page-grid page-shell">
@@ -69,14 +72,20 @@ export async function MarketDashboard() {
                 <strong>{blotter.length}</strong>
               </div>
             </div>
+            <div className="badge-stack">
+              <span className={`badge ${observation.websocket_connected ? "badge-live" : "badge-pending"}`}>
+                {observation.websocket_connected ? "websocket connected" : "awaiting live stream"}
+              </span>
+              <span className="badge badge-provider">reconnects {observation.reconnect_count}</span>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="panel">
         <div className="section-head">
-          <h2>Terminal status</h2>
-          <p className="muted">The front page keeps the operator aware of venue state before drilling into a market.</p>
+          <h2>Observation status</h2>
+          <p className="muted">Live-session health for a multi-hour monitoring run.</p>
         </div>
         <div className="stack">
           <div className="signal-card">
@@ -90,9 +99,67 @@ export async function MarketDashboard() {
             </div>
           </div>
           <div className="signal-card">
-            <span className="metric-label">Desk focus</span>
-            <strong>BTC / ETH short horizon</strong>
-            <span className="muted">5-minute and 15-minute contracts stay front and center in the market table.</span>
+            <span className="metric-label">Last event</span>
+            <strong>{observation.last_event_at ? formatTime(observation.last_event_at) : "none yet"}</strong>
+            <span className="muted">
+              raw {observation.raw_event_count} | trades {observation.trade_event_count} | books {observation.book_event_count}
+            </span>
+          </div>
+          <div className="signal-card">
+            <span className="metric-label">Dropped / duplicate</span>
+            <strong>{observation.dropped_event_count} / {observation.duplicate_event_count}</strong>
+            <span className="muted">{observation.last_error ?? "No recent stream errors."}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>BTC quick launch</h2>
+          <p className="muted">One-click entry points for the two market families we want to observe live.</p>
+        </div>
+        <div className="stack">
+          {btc5mMarket ? (
+            <Link className="list-card" href={`/markets/${btc5mMarket.id}`}>
+              <div className="badge-stack">
+                <span className="badge badge-type">BTC 5m</span>
+                <span className={`badge ${btc5mMarket.source === "real" ? "badge-real" : "badge-mock"}`}>
+                  {btc5mMarket.source ?? "unknown"}
+                </span>
+              </div>
+              <strong>{btc5mMarket.title}</strong>
+              <span className="muted">Observe the live market detail panel.</span>
+            </Link>
+          ) : (
+            <div className="empty-state">No BTC 5m market currently loaded.</div>
+          )}
+          {btc15mMarket ? (
+            <Link className="list-card" href={`/markets/${btc15mMarket.id}`}>
+              <div className="badge-stack">
+                <span className="badge badge-type">BTC 15m</span>
+                <span className={`badge ${btc15mMarket.source === "real" ? "badge-real" : "badge-mock"}`}>
+                  {btc15mMarket.source ?? "unknown"}
+                </span>
+              </div>
+              <strong>{btc15mMarket.title}</strong>
+              <span className="muted">Keep this open in a second tab during the observation run.</span>
+            </Link>
+          ) : (
+            <div className="empty-state">No BTC 15m market currently loaded.</div>
+          )}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Desk focus</h2>
+          <p className="muted">Observation mode stays centered on short-horizon crypto flow.</p>
+        </div>
+        <div className="stack">
+          <div className="signal-card">
+            <span className="metric-label">Selected markets</span>
+            <strong>{observation.selected_market_count}</strong>
+            <span className="muted">Assets subscribed: {observation.selected_asset_count}</span>
           </div>
         </div>
       </section>

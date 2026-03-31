@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { fetchFeatures, fetchMarketDetail, fetchOrderBook, fetchTrades } from "../lib/api";
+import { fetchFeatures, fetchMarketDetail, fetchOrderBook, fetchSystemHealth, fetchTrades } from "../lib/api";
 
 function pct(value?: number): string {
   if (value === undefined || value === null) return "n/a";
@@ -8,15 +8,17 @@ function pct(value?: number): string {
 }
 
 export async function MarketDetail({ marketId }: { marketId: string }) {
-  const [market, features, trades, orderbook] = await Promise.all([
+  const [market, features, trades, orderbook, health] = await Promise.all([
     fetchMarketDetail(marketId),
     fetchFeatures(marketId),
     fetchTrades(marketId),
     fetchOrderBook(marketId),
+    fetchSystemHealth(),
   ]);
   const latestFeature = features.at(-1);
   const recentTrades = trades.polymarket.slice(-10).reverse();
   const latestBook = orderbook.polymarket.at(-1);
+  const observation = health.polymarket_observation;
 
   return (
     <div className="page-grid page-shell">
@@ -31,6 +33,9 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
                 {market.source ?? "unknown"}
               </span>
               <span className="badge badge-provider">{market.external_context?.provider ?? "external context"}</span>
+              <span className={`badge ${observation.websocket_connected ? "badge-live" : "badge-pending"}`}>
+                {observation.websocket_connected ? "live stream" : "stream pending"}
+              </span>
             </div>
           </div>
           <p className="muted">
@@ -55,6 +60,13 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
             <span className="metric-label">Feature snapshot</span>
             <span className="metric-value">{latestFeature?.fair_value_estimate?.toFixed(3) ?? "n/a"}</span>
             <span className="muted">Fair-value gap {pct(latestFeature?.fair_value_gap)}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Observation stream</span>
+            <span className="metric-value">{observation.last_event_at ? new Date(observation.last_event_at).toLocaleTimeString() : "n/a"}</span>
+            <span className="muted">
+              reconnects {observation.reconnect_count} | dropped {observation.dropped_event_count}
+            </span>
           </div>
         </div>
       </section>

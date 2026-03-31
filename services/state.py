@@ -12,6 +12,7 @@ from packages.core_types.schemas import (
     PaperTradeDecision,
     PolymarketTopOfBook,
     PolymarketTrade,
+    PolymarketObservationStatus,
     RawPolymarketEvent,
     Trade,
 )
@@ -34,3 +35,6 @@ class InMemoryState:
     feature_snapshots: dict[str, list[FeatureSnapshot]] = field(default_factory=dict)
     backtest_reports: list[BacktestReport] = field(default_factory=list)
     paper_decisions: list[PaperTradeDecision] = field(default_factory=list)
+    polymarket_observation: PolymarketObservationStatus = field(
+        default_factory=lambda: PolymarketObservationStatus(source_mode="mock")
+    )

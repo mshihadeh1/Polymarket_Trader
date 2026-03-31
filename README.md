@@ -100,9 +100,9 @@ Current provider support:
 
 The application stores both raw provider payloads and normalized records in the in-memory runtime state. Downstream modules consume only normalized internal models.
 
-## Real Polymarket Ingestion
+## Real Polymarket Observation Mode
 
-The repo now supports a narrow real Polymarket path behind config while preserving the mock path for fallback.
+The repo now supports a narrow real Polymarket observation mode behind config while preserving the mock path for fallback.
 
 Config:
 
@@ -115,15 +115,70 @@ POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
 Current real Polymarket status:
 - real discovery from Gamma works and populates market state
 - real markets are classified into short-horizon crypto buckets and exposed through the existing market endpoints
-- the websocket path connects and receives real market events
+- the websocket path is supervised for long observation runs with reconnect counters, last-event timestamps, and dropped/duplicate event tracking
 - raw websocket payloads are stored before normalization
-- normalized Polymarket order-book and trade records are only partially working in real mode today
+- the UI exposes live observation status and quick-launch links for BTC 5m and BTC 15m markets
 
 Known limitations / TODOs:
 - the websocket adapter currently handles only a narrow set of market-channel events: `last_trade_price`, `price_change`, `best_bid_ask`, and `book`
-- the real websocket path is not yet end-to-end reliable: during a live validation run on March 31, 2026 it received real events and then failed on an unexpected `book` payload shape in top-of-book normalization
+- this is observation-grade hardening, not trading-grade hardening
 - some Polymarket feed fields are normalized defensively because public docs are not exhaustive for every event variant
 - this slice focuses on live ingestion and in-memory/runtime persistence, not full Timescale historical persistence yet
+
+## 2-4 Hour Observation Runbook
+
+Use this flow when you want to observe real Polymarket BTC 5m and BTC 15m markets for a few hours.
+
+1. Configure real Polymarket mode in `.env`:
+
+```bash
+USE_MOCK_POLYMARKET=false
+USE_MOCK_POLYMARKET_CLIENT=false
+USE_MOCK_EXTERNAL_PROVIDER=true
+ENABLE_DB_PERSISTENCE=false
+POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
+POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
+```
+
+2. Start the API:
+
+```bash
+cd apps/api
+uvicorn polymarket_trader.main:app --reload --port 8000
+```
+
+3. Start the web app:
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+4. Open the dashboard at `http://localhost:3000`.
+
+5. Use the `BTC 5m` and `BTC 15m` quick-launch cards on the dashboard to open one market detail page for each family.
+
+6. Keep the following visible during the session:
+- dashboard observation status card
+- reconnect count
+- last-event time
+- dropped / duplicate counts
+- the selected BTC 5m and BTC 15m market detail pages
+
+7. If the websocket falls behind, reload the dashboard and check:
+- `live feed` / `websocket connected` badges
+- `last event` freshness
+- `dropped / duplicate` counts
+- API `GET /api/v1/system/health`
+
+8. If you need to reset the in-memory session during observation:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/ingestion/bootstrap
+```
+
+This runbook is meant for venue observation and data inspection only. It does not imply live trading readiness.
 
 Optional local persistence for feature snapshots, backtest reports, and paper decisions can be enabled with:
 

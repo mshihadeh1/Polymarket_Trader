@@ -135,6 +135,7 @@ def build_router(container: Container) -> APIRouter:
             "markets_loaded": len(container.state.markets),
             "mock_polymarket": container.polymarket_client.is_mock,
             "polymarket_client": container.polymarket_client.client_name,
+            "polymarket_observation": container.state.polymarket_observation,
             "external_historical_provider": container.settings.external_historical_provider,
             "mock_external_provider": container.settings.use_mock_external_provider,
             "external_provider_capabilities": container.external_market_data_provider.capabilities(),

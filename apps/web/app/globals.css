@@ -298,6 +298,10 @@ pre,
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.detail-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .metric-value {
   font-size: 1.65rem;
   font-weight: 800;

@@ -58,6 +58,22 @@ class Container:
             self.state.feature_snapshots.clear()
             self.state.backtest_reports.clear()
             self.state.paper_decisions.clear()
+            self.state.polymarket_observation.source_mode = "mock" if self.polymarket_client.is_mock else "real"
+            self.state.polymarket_observation.stream_task_running = False
+            self.state.polymarket_observation.websocket_connected = False
+            self.state.polymarket_observation.startup_completed = False
+            self.state.polymarket_observation.last_connect_at = None
+            self.state.polymarket_observation.last_disconnect_at = None
+            self.state.polymarket_observation.last_event_at = None
+            self.state.polymarket_observation.reconnect_count = 0
+            self.state.polymarket_observation.raw_event_count = 0
+            self.state.polymarket_observation.trade_event_count = 0
+            self.state.polymarket_observation.book_event_count = 0
+            self.state.polymarket_observation.duplicate_event_count = 0
+            self.state.polymarket_observation.dropped_event_count = 0
+            self.state.polymarket_observation.selected_market_count = 0
+            self.state.polymarket_observation.selected_asset_count = 0
+            self.state.polymarket_observation.last_error = None
         market_count = await self.polymarket_ingestor.bootstrap()
         self.hyperliquid_ingestor.bootstrap()
         for market_id in self.state.markets:
@@ -74,7 +90,7 @@ class Container:
         return asyncio.run(self.bootstrap_seed_data(force_reload=force_reload))
 
 
-def build_container(settings: Settings) -> Container:
+def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Container:
     state = InMemoryState()
     root = Path(__file__).resolve().parents[4]
     polymarket_client = build_polymarket_client(settings, root=root)
@@ -111,7 +127,8 @@ def build_container(settings: Settings) -> Container:
         polymarket_client=polymarket_client,
         external_market_data_provider=external_provider,
     )
-    container.bootstrap_seed_data_sync()
+    if bootstrap_on_build:
+        container.bootstrap_seed_data_sync()
     return container
 
 

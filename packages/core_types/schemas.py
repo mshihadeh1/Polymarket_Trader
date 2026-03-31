@@ -183,6 +183,25 @@ class PolymarketOrderBookUpdate(BaseModel):
     asks: list[list[float]] = Field(default_factory=list)
 
 
+class PolymarketObservationStatus(BaseModel):
+    source_mode: Literal["mock", "real"]
+    stream_task_running: bool = False
+    websocket_connected: bool = False
+    startup_completed: bool = False
+    last_connect_at: datetime | None = None
+    last_disconnect_at: datetime | None = None
+    last_event_at: datetime | None = None
+    reconnect_count: int = 0
+    raw_event_count: int = 0
+    trade_event_count: int = 0
+    book_event_count: int = 0
+    duplicate_event_count: int = 0
+    dropped_event_count: int = 0
+    selected_market_count: int = 0
+    selected_asset_count: int = 0
+    last_error: str | None = None
+
+
 class FeatureSnapshot(BaseModel):
     market_id: UUID
     ts: datetime

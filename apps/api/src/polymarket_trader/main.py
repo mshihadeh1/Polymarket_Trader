@@ -11,7 +11,7 @@ from polymarket_trader.core.logging import configure_logging
 
 settings = get_settings()
 configure_logging(settings.log_level)
-container = build_container(settings)
+container = build_container(settings, bootstrap_on_build=False)
 
 
 @asynccontextmanager

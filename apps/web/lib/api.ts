@@ -81,6 +81,25 @@ export type PaperStatus = {
   realized_pnl: number;
 };
 
+export type PolymarketObservationStatus = {
+  source_mode: "mock" | "real";
+  stream_task_running: boolean;
+  websocket_connected: boolean;
+  startup_completed: boolean;
+  last_connect_at?: string;
+  last_disconnect_at?: string;
+  last_event_at?: string;
+  reconnect_count: number;
+  raw_event_count: number;
+  trade_event_count: number;
+  book_event_count: number;
+  duplicate_event_count: number;
+  dropped_event_count: number;
+  selected_market_count: number;
+  selected_asset_count: number;
+  last_error?: string | null;
+};
+
 const baseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -168,6 +187,7 @@ export async function fetchSystemHealth(): Promise<{
   markets_loaded: number;
   mock_polymarket: boolean;
   polymarket_client: string;
+  polymarket_observation: PolymarketObservationStatus;
 }> {
   const response = await fetch(`${baseUrl}/api/v1/system/health`, {
     cache: "no-store",

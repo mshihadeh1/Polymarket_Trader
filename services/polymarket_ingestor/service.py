@@ -15,6 +15,7 @@ from packages.core_types.schemas import (
     MarketToken,
     OrderBookSnapshot,
     PolymarketMarketMetadata,
+    PolymarketObservationStatus,
     PolymarketTopOfBook,
     PolymarketTrade,
     RawPolymarketEvent,
@@ -40,12 +41,18 @@ class PolymarketIngestorService:
         self._stream_task: asyncio.Task | None = None
         self._asset_to_market: dict[str, str] = {}
         self._seen_event_keys: set[str] = set()
+        self._state.polymarket_observation = PolymarketObservationStatus(source_mode=self.data_source)
+        set_lifecycle = getattr(self._client, "set_lifecycle_callback", None)
+        if callable(set_lifecycle):
+            set_lifecycle(self._handle_lifecycle_event)
 
     @property
     def data_source(self) -> str:
         return "mock" if self._client.is_mock else "real"
 
     async def bootstrap(self) -> int:
+        self._asset_to_market.clear()
+        self._seen_event_keys.clear()
         raw_markets, normalized_markets = await self._client.discover_active_markets()
         count = 0
         selected_asset_ids: list[str] = []
@@ -91,39 +98,58 @@ class PolymarketIngestorService:
             if self._persistence is not None:
                 self._persistence.save_market_summary(summary)
             count += 1
+        self._state.polymarket_observation.source_mode = self.data_source
+        self._state.polymarket_observation.selected_market_count = count
+        self._state.polymarket_observation.selected_asset_count = len(selected_asset_ids)
+        self._state.polymarket_observation.startup_completed = True
+        self._state.polymarket_observation.last_error = None
         logger.info("Polymarket discovery returned %s selected short-horizon markets", count)
-        logger.info("Selected Polymarket asset ids: %s", selected_asset_ids)
+        logger.info("Selected %s Polymarket asset ids for live observation", len(selected_asset_ids))
         return count
 
     async def start_live_ingestion(self) -> None:
         if self._client.is_mock or not self._asset_to_market:
+            self._state.polymarket_observation.stream_task_running = False
             return
         if self._stream_task is not None and not self._stream_task.done():
             return
         asset_ids = sorted(self._asset_to_market.keys())
+        self._state.polymarket_observation.stream_task_running = True
         self._stream_task = asyncio.create_task(
             self._client.stream_market_events(asset_ids, self.handle_raw_event),
             name="polymarket-market-stream",
         )
 
     async def stop_live_ingestion(self) -> None:
+        self._state.polymarket_observation.stream_task_running = False
+        self._state.polymarket_observation.websocket_connected = False
         if self._stream_task is not None:
             self._stream_task.cancel()
             try:
                 await self._stream_task
             except asyncio.CancelledError:
                 logger.info("Stopped Polymarket market stream")
+            self._stream_task = None
         close = getattr(self._client, "close", None)
         if callable(close):
             await close()
 
     def handle_raw_event(self, raw_event: RawPolymarketEvent) -> None:
+        self._state.polymarket_observation.raw_event_count += 1
+        self._state.polymarket_observation.last_event_at = raw_event.timestamp
         market_id = self._asset_to_market.get(raw_event.asset_id)
         if market_id is None:
+            self._state.polymarket_observation.dropped_event_count += 1
+            logger.debug("Dropped Polymarket event for unknown asset_id=%s", raw_event.asset_id)
             return
         event_key = raw_event.sequence or f"{market_id}:{raw_event.asset_id}:{raw_event.timestamp.isoformat()}:{raw_event.event_type}"
         if event_key in self._seen_event_keys:
-            logger.debug("Dropped duplicate Polymarket event %s", event_key)
+            self._state.polymarket_observation.duplicate_event_count += 1
+            self._log_counter_event(
+                "duplicate",
+                self._state.polymarket_observation.duplicate_event_count,
+                f"Dropped duplicate Polymarket event {event_key}",
+            )
             return
         self._seen_event_keys.add(event_key)
         self._state.polymarket_raw_events.setdefault(market_id, []).append(raw_event.payload)
@@ -132,8 +158,13 @@ class PolymarketIngestorService:
             self._persistence.save_polymarket_raw_event(raw_event, market_id=market_id)
 
         if raw_event.event_type in {"last_trade_price", "price_change"}:
-            trade = self._normalize_trade(raw_event, market_id)
+            try:
+                trade = self._normalize_trade(raw_event, market_id)
+            except Exception as exc:
+                self._record_dropped_event(raw_event, exc)
+                trade = None
             if trade is not None:
+                self._state.polymarket_observation.trade_event_count += 1
                 self._state.polymarket_trade_events[market_id].append(trade)
                 self._state.polymarket_trades[market_id].append(
                     Trade(
@@ -152,8 +183,13 @@ class PolymarketIngestorService:
                     self._persistence.save_polymarket_trade(trade)
 
         if raw_event.event_type in {"best_bid_ask", "book"}:
-            top = self._normalize_top_of_book(raw_event, market_id)
+            try:
+                top = self._normalize_top_of_book(raw_event, market_id)
+            except Exception as exc:
+                self._record_dropped_event(raw_event, exc)
+                top = None
             if top is not None:
+                self._state.polymarket_observation.book_event_count += 1
                 self._state.polymarket_top_of_book[market_id].append(top)
                 snapshot = OrderBookSnapshot(
                     ts=top.ts,
@@ -171,6 +207,14 @@ class PolymarketIngestorService:
                 self._state.market_details[market_id].latest_polymarket_orderbook = snapshot
                 if self._persistence is not None:
                     self._persistence.save_polymarket_top_of_book(top)
+            else:
+                self._state.polymarket_observation.dropped_event_count += 1
+                self._log_counter_event(
+                    "dropped",
+                    self._state.polymarket_observation.dropped_event_count,
+                    f"Dropped Polymarket {raw_event.event_type} event without usable top-of-book for market_id={market_id}",
+                    warning=True,
+                )
 
     def _build_market_summary(
         self,
@@ -252,8 +296,8 @@ class PolymarketIngestorService:
             bids = payload.get("bids", [])
             asks = payload.get("asks", [])
             if bids and asks:
-                best_bid = _coerce_float(bids[0][0])
-                best_ask = _coerce_float(asks[0][0])
+                best_bid = _extract_level_price(bids[0])
+                best_ask = _extract_level_price(asks[0])
         if best_bid is None or best_ask is None:
             return None
         return PolymarketTopOfBook(
@@ -265,6 +309,42 @@ class PolymarketIngestorService:
             best_ask=best_ask,
             spread=best_ask - best_bid,
         )
+
+    def _handle_lifecycle_event(self, state: str, detail: str | None = None) -> None:
+        now = datetime.now(timezone.utc)
+        observation = self._state.polymarket_observation
+        if state == "connected":
+            observation.websocket_connected = True
+            observation.last_connect_at = now
+            observation.last_error = None
+            logger.info("Polymarket websocket connected for live observation")
+            return
+        if state == "disconnected":
+            observation.websocket_connected = False
+            observation.last_disconnect_at = now
+            observation.reconnect_count += 1
+            observation.last_error = detail
+            logger.warning("Polymarket websocket disconnected; reconnect_count=%s", observation.reconnect_count)
+            return
+        if state == "stopped":
+            observation.websocket_connected = False
+            observation.last_disconnect_at = now
+            logger.info("Polymarket websocket stopped")
+
+    def _record_dropped_event(self, raw_event: RawPolymarketEvent, exc: Exception) -> None:
+        self._state.polymarket_observation.dropped_event_count += 1
+        self._state.polymarket_observation.last_error = f"{raw_event.event_type}: {exc}"
+        self._log_counter_event(
+            "dropped",
+            self._state.polymarket_observation.dropped_event_count,
+            f"Dropped Polymarket event_type={raw_event.event_type} asset_id={raw_event.asset_id} reason={exc}",
+            warning=True,
+        )
+
+    def _log_counter_event(self, kind: str, count: int, message: str, warning: bool = False) -> None:
+        if count <= 5 or count % 100 == 0:
+            log = logger.warning if warning else logger.info
+            log("%s_count=%s %s", kind, count, message)
 
     def _seed_orderbooks(self, raw_market: dict[str, object], underlying: str | None) -> list[OrderBookSnapshot]:
         snapshots = raw_market.get("orderbook", [])
@@ -322,6 +402,16 @@ def _coerce_float(value: object) -> float | None:
         return None if value is None else float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _extract_level_price(level: object) -> float | None:
+    if isinstance(level, (list, tuple)) and level:
+        return _coerce_float(level[0])
+    if isinstance(level, dict):
+        for key in ("price", "p", "px"):
+            if key in level:
+                return _coerce_float(level[key])
+    return None
 
 
 def _is_uuid(value: str) -> bool:

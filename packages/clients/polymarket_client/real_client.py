@@ -30,6 +30,7 @@ class RealPolymarketClient(PolymarketClient):
         self._http_client = http_client or httpx.AsyncClient(timeout=20.0)
         self._reconnect_delay_seconds = reconnect_delay_seconds
         self._stop_event = asyncio.Event()
+        self._lifecycle_callback: Callable[[str, str | None], None] | None = None
 
     @property
     def client_name(self) -> str:
@@ -71,17 +72,26 @@ class RealPolymarketClient(PolymarketClient):
             try:
                 logger.info("Connecting to Polymarket market websocket for %s assets", len(asset_ids))
                 async with websockets.connect(self._ws_url, ping_interval=None) as websocket:
+                    self._emit_lifecycle("connected")
                     await self._subscribe(websocket, asset_ids)
                     await self._event_loop(websocket, on_event)
             except asyncio.CancelledError:
+                self._emit_lifecycle("stopped")
                 raise
             except Exception:
+                self._emit_lifecycle("disconnected", "websocket_error")
                 logger.exception("Polymarket websocket disconnected; reconnecting after delay")
                 await asyncio.sleep(self._reconnect_delay_seconds)
 
     async def close(self) -> None:
         self._stop_event.set()
-        await self._http_client.aclose()
+        try:
+            await self._http_client.aclose()
+        except RuntimeError:
+            logger.warning("Skipped async HTTP client close because the event loop is already closed")
+
+    def set_lifecycle_callback(self, callback: Callable[[str, str | None], None]) -> None:
+        self._lifecycle_callback = callback
 
     async def _subscribe(self, websocket: Any, asset_ids: list[str]) -> None:
         payload = {
@@ -106,6 +116,10 @@ class RealPolymarketClient(PolymarketClient):
             if isinstance(payload, dict):
                 # TODO: Expand schema handling if Polymarket adds additional market-channel event envelopes.
                 on_event(self._normalize_raw_event(payload))
+
+    def _emit_lifecycle(self, state: str, detail: str | None = None) -> None:
+        if self._lifecycle_callback is not None:
+            self._lifecycle_callback(state, detail)
 
     def _normalize_market_payload(self, payload: dict[str, Any]) -> PolymarketMarketMetadata:
         token_ids = self._parse_json_list(payload.get("clobTokenIds"))
