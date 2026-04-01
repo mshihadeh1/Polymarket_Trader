@@ -6,6 +6,7 @@ from packages.core_types.schemas import PolymarketMarketMetadata
 
 _BTC_PATTERN = re.compile(r"\bbtc\b|bitcoin", re.IGNORECASE)
 _ETH_PATTERN = re.compile(r"\beth\b|ethereum", re.IGNORECASE)
+_SOL_PATTERN = re.compile(r"\bsol\b|solana", re.IGNORECASE)
 _FIVE_MIN_PATTERN = re.compile(r"(?<!1)\b5m\b|(?<!1)5-minute|(?<!1)5 minute", re.IGNORECASE)
 _FIFTEEN_MIN_PATTERN = re.compile(r"\b15m\b|15-minute|15 minute", re.IGNORECASE)
 
@@ -17,13 +18,11 @@ def classify_polymarket_market(metadata: PolymarketMarketMetadata) -> tuple[str,
         underlying = "BTC"
     elif _ETH_PATTERN.search(text):
         underlying = "ETH"
+    elif _SOL_PATTERN.search(text):
+        underlying = "SOL"
 
-    if underlying == "BTC" and _FIVE_MIN_PATTERN.search(text):
+    if underlying in {"BTC", "ETH", "SOL"} and _FIVE_MIN_PATTERN.search(text):
         return "crypto_5m", underlying
-    if underlying == "BTC" and _FIFTEEN_MIN_PATTERN.search(text):
-        return "crypto_15m", underlying
-    if underlying == "ETH" and _FIVE_MIN_PATTERN.search(text):
-        return "crypto_5m", underlying
-    if underlying == "ETH" and _FIFTEEN_MIN_PATTERN.search(text):
+    if underlying in {"BTC", "ETH", "SOL"} and _FIFTEEN_MIN_PATTERN.search(text):
         return "crypto_15m", underlying
     return "other", underlying

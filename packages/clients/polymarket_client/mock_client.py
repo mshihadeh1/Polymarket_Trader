@@ -28,9 +28,23 @@ class MockPolymarketClient(PolymarketClient):
     def ws_stream_supported(self) -> bool:
         return False
 
-    async def discover_active_markets(self) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
+    async def discover_markets(
+        self,
+        *,
+        closed: bool | None = None,
+        active: bool | None = None,
+        limit: int | None = None,
+    ) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
         payload = self.fetch_seed()
         markets = payload.get("markets", [])
+        filtered = [
+            item
+            for item in markets
+            if (closed is None or (item.get("status") == "closed") == closed)
+            and (active is None or (item.get("status") == "active") == active)
+        ]
+        if limit is not None:
+            filtered = filtered[:limit]
         normalized = [
             PolymarketMarketMetadata(
                 market_id=item["id"],
@@ -54,9 +68,12 @@ class MockPolymarketClient(PolymarketClient):
                 last_trade_price=item.get("trades", [{}])[-1].get("price") if item.get("trades") else None,
                 raw_tags=item.get("tags", []),
             )
-            for item in markets
+            for item in filtered
         ]
-        return markets, normalized
+        return filtered, normalized
+
+    async def discover_active_markets(self) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
+        return await self.discover_markets(active=True)
 
     async def stream_market_events(
         self,

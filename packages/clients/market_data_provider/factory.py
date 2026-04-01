@@ -19,6 +19,13 @@ def build_historical_market_data_provider(settings: Settings, root: Path) -> His
 def build_provider_from_name(provider_name: str, settings: Settings, root: Path) -> HistoricalMarketDataProvider:
     symbol_map = json.loads(settings.external_provider_symbol_map)
     csv_paths = json.loads(settings.csv_provider_paths)
+    csv_paths.update(
+        {
+            "BTC": settings.csv_btc_path,
+            "ETH": settings.csv_eth_path,
+            "SOL": settings.csv_sol_path,
+        }
+    )
     normalized = provider_name.lower()
     if normalized == "binance":
         return BinanceHistoricalProvider(

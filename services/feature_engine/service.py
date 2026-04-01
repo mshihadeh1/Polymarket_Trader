@@ -30,11 +30,32 @@ class FeatureEngineService:
         market = self._state.market_details.get(market_id)
         if market is None:
             raise KeyError(f"Unknown market_id={market_id}")
-        external_bars_all = self._state.external_bars.get(market_id, [])
-        polymarket_trades_all = self._state.polymarket_trades.get(market_id, [])
-        external_trades_all = self._state.external_trades.get(market_id, [])
-        orderbooks_all = self._state.polymarket_orderbooks.get(market_id, [])
-        external_orderbooks_all = self._state.external_orderbooks.get(market_id, [])
+        snapshot = self.compute_snapshot_from_series(
+            market_id=market_id,
+            market=market,
+            external_bars_all=self._state.external_bars.get(market_id, []),
+            polymarket_trades_all=self._state.polymarket_trades.get(market_id, []),
+            external_trades_all=self._state.external_trades.get(market_id, []),
+            orderbooks_all=self._state.polymarket_orderbooks.get(market_id, []),
+            external_orderbooks_all=self._state.external_orderbooks.get(market_id, []),
+            as_of=as_of,
+            persist=True,
+        )
+        self._state.market_details[market_id].external_context = self._market_window.get_external_context(market_id, as_of=snapshot.ts)
+        return snapshot
+
+    def compute_snapshot_from_series(
+        self,
+        market_id: str,
+        market,
+        external_bars_all,
+        polymarket_trades_all,
+        external_trades_all,
+        orderbooks_all,
+        external_orderbooks_all,
+        as_of: datetime | None = None,
+        persist: bool = False,
+    ) -> FeatureSnapshot:
         external_bars = [bar for bar in external_bars_all if as_of is None or bar.ts <= as_of]
         polymarket_trades = [trade for trade in polymarket_trades_all if as_of is None or trade.ts <= as_of]
         external_trades = [trade for trade in external_trades_all if as_of is None or trade.ts <= as_of]
@@ -50,7 +71,12 @@ class FeatureEngineService:
             current_ts = external_bars[-1].ts
         else:
             current_ts = market.opens_at
-        context = self._market_window.get_external_context(market_id, as_of=current_ts)
+        context = self._market_window.get_external_context_for_series(
+            market=market,
+            external_bars=external_bars,
+            external_orderbooks=external_orderbooks,
+            as_of=current_ts,
+        )
         top = orderbooks[-1] if orderbooks else None
         external_top = external_orderbooks[-1] if external_orderbooks else None
         midpoint = None
@@ -103,10 +129,9 @@ class FeatureEngineService:
             venue_divergence=venue_divergence,
         )
         snapshots = self._state.feature_snapshots.setdefault(market_id, [])
-        if not snapshots or snapshots[-1].ts != snapshot.ts:
+        if persist and (not snapshots or snapshots[-1].ts != snapshot.ts):
             snapshots.append(snapshot)
-        self._state.market_details[market_id].external_context = context
-        if self._persistence is not None:
+        if persist and self._persistence is not None:
             self._persistence.save_feature_snapshot(snapshot)
         return snapshot
 

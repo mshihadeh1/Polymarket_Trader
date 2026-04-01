@@ -56,6 +56,13 @@ def build_router(container: Container) -> APIRouter:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @router.get("/markets/{market_id}/live-feature-view")
+    def get_live_feature_view(market_id: str):
+        try:
+            return container.backtester.build_live_feature_view(market_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @router.get("/replay/{market_id}")
     def get_replay(market_id: str):
         try:
@@ -83,6 +90,7 @@ def build_router(container: Container) -> APIRouter:
                 for symbol in container.settings.default_underlyings.split(",")
                 if symbol.strip()
             ],
+            "dataset_validation": list(container.state.external_dataset_validation.values()),
         }
 
     @router.post("/backtests/{market_id}")
@@ -104,6 +112,44 @@ def build_router(container: Container) -> APIRouter:
             if report.run_id == run_id:
                 return report
         raise HTTPException(status_code=404, detail=f"Unknown run_id={run_id}")
+
+    @router.get("/evaluations/closed-markets")
+    async def list_closed_markets(asset: str | None = Query(default=None), timeframe: str | None = Query(default=None), limit: int = Query(default=25)):
+        return await container.backtester.list_eligible_closed_markets(asset=asset, timeframe=timeframe, limit=limit)
+
+    @router.post("/evaluations/closed-markets/run")
+    async def run_closed_market_batch(
+        asset: str | None = Query(default=None),
+        timeframe: str | None = Query(default=None),
+        limit: int = Query(default=20),
+        strategy_name: str = Query(default="combined_cvd_gap"),
+        include_hyperliquid_enrichment: bool = Query(default=True),
+    ):
+        return await container.backtester.run_closed_market_batch(
+            asset=asset,
+            timeframe=timeframe,
+            limit=limit,
+            strategy_name=strategy_name,
+            include_hyperliquid_enrichment=include_hyperliquid_enrichment,
+        )
+
+    @router.get("/evaluations/results")
+    def list_closed_market_results():
+        return container.backtester.list_closed_market_batch_reports()
+
+    @router.post("/evaluations/compare")
+    async def compare_closed_market_batches(
+        asset: str | None = Query(default=None),
+        timeframe: str | None = Query(default=None),
+        limit: int = Query(default=20),
+        strategy_name: str = Query(default="combined_cvd_gap"),
+    ):
+        return await container.backtester.run_closed_market_comparison(
+            asset=asset,
+            timeframe=timeframe,
+            limit=limit,
+            strategy_name=strategy_name,
+        )
 
     @router.get("/paper-trading/blotter")
     def blotter():
@@ -152,6 +198,8 @@ def build_router(container: Container) -> APIRouter:
             "polymarket_observation": container.state.polymarket_observation,
             "external_historical_provider": container.settings.external_historical_provider,
             "mock_external_provider": container.settings.use_mock_external_provider,
+            "mock_hyperliquid_recent": container.settings.use_mock_hyperliquid_recent,
+            "dataset_validation": list(container.state.external_dataset_validation.values()),
             "external_provider_capabilities": container.external_market_data_provider.capabilities(),
         }
 

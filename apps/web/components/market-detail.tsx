@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { fetchFeatures, fetchMarketDetail, fetchOrderBook, fetchSystemHealth, fetchTrades } from "../lib/api";
+import { fetchFeatures, fetchLiveFeatureView, fetchMarketDetail, fetchOrderBook, fetchSystemHealth, fetchTrades } from "../lib/api";
 
 function pct(value?: number): string {
   if (value === undefined || value === null) return "n/a";
@@ -8,12 +8,13 @@ function pct(value?: number): string {
 }
 
 export async function MarketDetail({ marketId }: { marketId: string }) {
-  const [market, features, trades, orderbook, health] = await Promise.all([
+  const [market, features, trades, orderbook, health, liveFeatureView] = await Promise.all([
     fetchMarketDetail(marketId),
     fetchFeatures(marketId),
     fetchTrades(marketId),
     fetchOrderBook(marketId),
     fetchSystemHealth(),
+    fetchLiveFeatureView(marketId),
   ]);
   const latestFeature = features.at(-1);
   const recentTrades = trades.polymarket.slice(-10).reverse();
@@ -33,6 +34,9 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
                 {market.source ?? "unknown"}
               </span>
               <span className="badge badge-provider">{market.external_context?.provider ?? "external context"}</span>
+              <span className="badge badge-historical">
+                {(liveFeatureView.availability as { enriched_with_hyperliquid?: boolean }).enriched_with_hyperliquid ? "hyperliquid enriched" : "bars only"}
+              </span>
               <span className={`badge ${observation.websocket_connected ? "badge-live" : "badge-pending"}`}>
                 {observation.websocket_connected ? "live stream" : "stream pending"}
               </span>
@@ -68,6 +72,11 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
               reconnects {observation.reconnect_count} | dropped {observation.dropped_event_count}
             </span>
           </div>
+        </div>
+        <div className="badge-stack">
+          {((liveFeatureView.availability as { notes?: string[] }).notes ?? []).slice(0, 3).map((note) => (
+            <span className="badge badge-provider" key={note}>{note}</span>
+          ))}
         </div>
       </section>
 

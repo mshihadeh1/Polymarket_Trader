@@ -32,10 +32,17 @@ class Settings(BaseSettings):
     external_historical_provider: str = Field(default="binance", alias="EXTERNAL_HISTORICAL_PROVIDER")
     use_mock_external_provider: bool = Field(default=True, alias="USE_MOCK_EXTERNAL_PROVIDER")
     binance_base_url: str = Field(default="https://api.binance.com", alias="BINANCE_BASE_URL")
+    csv_btc_path: str = Field(default="data/datasets/BTCUSD-1m-104wks-data.csv", alias="CSV_BTC_PATH")
+    csv_eth_path: str = Field(default="data/datasets/eth_1m.csv", alias="CSV_ETH_PATH")
+    csv_sol_path: str = Field(default="data/datasets/SOLUSD-1m-104wks-data.csv", alias="CSV_SOL_PATH")
     csv_provider_paths: str = Field(
-        default='{"BTC":"data/datasets/btc_1m.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/sol_1m.csv"}',
+        default='{"BTC":"data/datasets/BTCUSD-1m-104wks-data.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/SOLUSD-1m-104wks-data.csv"}',
         alias="CSV_PROVIDER_PATHS",
     )
+    hyperliquid_info_url: str = Field(default="https://api.hyperliquid.xyz/info", alias="HYPERLIQUID_INFO_URL")
+    use_mock_hyperliquid_recent: bool = Field(default=True, alias="USE_MOCK_HYPERLIQUID_RECENT")
+    hyperliquid_recent_trade_limit: int = Field(default=500, alias="HYPERLIQUID_RECENT_TRADE_LIMIT")
+    hyperliquid_recent_lookback_minutes: int = Field(default=240, alias="HYPERLIQUID_RECENT_LOOKBACK_MINUTES")
     polymarket_api_base_url: str = Field(default="https://gamma-api.polymarket.com", alias="POLYMARKET_API_BASE_URL")
     polymarket_ws_url: str = Field(default="wss://ws-subscriptions-clob.polymarket.com/ws/market", alias="POLYMARKET_WS_URL")
     external_provider_symbol_map: str = Field(

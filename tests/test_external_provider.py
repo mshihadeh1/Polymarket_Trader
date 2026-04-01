@@ -111,3 +111,33 @@ def test_provider_factory_selects_csv() -> None:
         assert provider.capabilities().has_ohlcv is True
     finally:
         csv_path.unlink(missing_ok=True)
+
+
+def test_csv_provider_validation_reports_duplicates_and_schema_issues() -> None:
+    tmp_path = Path("C:/Users/Mahdi/Documents/Polymarket_Trader/data/test_tmp")
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    dup_path = tmp_path / "btc_duplicates.csv"
+    bad_path = tmp_path / "eth_bad.csv"
+    try:
+        dup_path.write_text(
+            "datetime,open,high,low,close,volume\n"
+            "2026-03-31 11:58:00,1,2,1,2,3\n"
+            "2026-03-31 11:58:00,1,2,1,2,4\n",
+            encoding="utf-8",
+        )
+        bad_path.write_text(
+            "datetime,open,high,close\n2026-03-31 11:58:00,1,2,2\n",
+            encoding="utf-8",
+        )
+        provider = CsvHistoricalProvider(
+            path_map={"BTC": str(dup_path), "ETH": str(bad_path)},
+            symbol_map={"BTC": "BTC", "ETH": "ETH"},
+            root=tmp_path,
+        )
+        reports = {report.symbol: report for report in provider.validate_datasets()}
+        assert reports["BTC"].duplicate_count == 1
+        assert reports["BTC"].row_count == 2
+        assert reports["ETH"].schema_issues
+    finally:
+        dup_path.unlink(missing_ok=True)
+        bad_path.unlink(missing_ok=True)

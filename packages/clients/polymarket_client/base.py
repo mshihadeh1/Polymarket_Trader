@@ -19,6 +19,16 @@ class PolymarketClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def discover_markets(
+        self,
+        *,
+        closed: bool | None = None,
+        active: bool | None = None,
+        limit: int | None = None,
+    ) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
+        raise NotImplementedError
+
+    @abstractmethod
     async def discover_active_markets(self) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
         raise NotImplementedError
 

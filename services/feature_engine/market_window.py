@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from packages.core_types.schemas import ExternalContext
+from packages.core_types.schemas import ExternalContext, HistoricalBar, MarketDetail, OrderBookSnapshot
 from packages.utils.time import seconds_until
 from services.state import InMemoryState
 
@@ -15,14 +15,28 @@ class MarketWindowService:
         market = self._state.market_details.get(market_id)
         if market is None:
             raise KeyError(f"Unknown market_id={market_id}")
+        return self.get_external_context_for_series(
+            market=market,
+            external_bars=self._state.external_bars.get(market_id, []),
+            external_orderbooks=self._state.external_orderbooks.get(market_id, []),
+            as_of=as_of,
+        )
+
+    def get_external_context_for_series(
+        self,
+        market: MarketDetail,
+        external_bars: list[HistoricalBar],
+        external_orderbooks: list[OrderBookSnapshot],
+        as_of: datetime | None = None,
+    ) -> ExternalContext:
         external_bars = [
             bar
-            for bar in self._state.external_bars.get(market_id, [])
+            for bar in external_bars
             if as_of is None or bar.ts <= as_of
         ]
         external_orderbooks = [
             book
-            for book in self._state.external_orderbooks.get(market_id, [])
+            for book in external_orderbooks
             if as_of is None or book.ts <= as_of
         ]
         current = external_orderbooks[-1].ts if external_orderbooks else external_bars[-1].ts if external_bars else market.opens_at
