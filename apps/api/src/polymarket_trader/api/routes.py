@@ -89,6 +89,96 @@ def build_router(container: Container) -> APIRouter:
     def list_research_strategies():
         return container.synthetic_research.list_strategies()
 
+    @router.get("/research/minute/strategies")
+    def list_minute_strategies():
+        return container.minute_research.list_strategies()
+
+    @router.get("/research/minute/rows")
+    def list_minute_rows(
+        asset: str | None = Query(default="BTC"),
+        limit: int = Query(default=200),
+        start: str | None = Query(default=None),
+        end: str | None = Query(default=None),
+    ):
+        return container.minute_research.list_rows(
+            asset=asset,
+            limit=limit,
+            start=parse_dt(start) if start else None,
+            end=parse_dt(end) if end else None,
+        )
+
+    @router.post("/research/minute/build")
+    def build_minute_rows(
+        asset: str | None = Query(default="BTC"),
+        start: str | None = Query(default=None),
+        end: str | None = Query(default=None),
+        refresh: bool = Query(default=False),
+    ):
+        return container.minute_research.build_minute_dataset(
+            asset=asset,
+            start=parse_dt(start) if start else None,
+            end=parse_dt(end) if end else None,
+            refresh=refresh,
+        )
+
+    @router.post("/research/minute/run")
+    def run_minute_batch(
+        asset: str | None = Query(default="BTC"),
+        timeframe: str = Query(default="crypto_5m"),
+        strategy_name: str = Query(default="minute_momentum"),
+        limit: int = Query(default=500),
+        start: str | None = Query(default=None),
+        end: str | None = Query(default=None),
+        refresh: bool = Query(default=False),
+    ):
+        try:
+            return container.minute_research.run_batch(
+                asset=asset,
+                timeframe=timeframe,
+                strategy_name=strategy_name,
+                limit=limit,
+                start=parse_dt(start) if start else None,
+                end=parse_dt(end) if end else None,
+                refresh=refresh,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.get("/research/minute/results")
+    def list_minute_results(timeframe: str | None = Query(default=None)):
+        return container.minute_research.list_synthetic_results(timeframe=timeframe)
+
+    @router.post("/research/validation/run")
+    def run_minute_validation(
+        asset: str | None = Query(default="BTC"),
+        timeframe: str | None = Query(default=None),
+        strategy_name: str = Query(default="minute_momentum"),
+        limit: int = Query(default=50),
+        start: str | None = Query(default=None),
+        end: str | None = Query(default=None),
+        refresh: bool = Query(default=False),
+    ):
+        try:
+            return container.minute_research.run_real_validation_batch(
+                asset=asset,
+                timeframe=timeframe,
+                strategy_name=strategy_name,
+                limit=limit,
+                start=parse_dt(start) if start else None,
+                end=parse_dt(end) if end else None,
+                refresh=refresh,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.get("/research/validation/results")
+    def list_minute_validation_results(timeframe: str | None = Query(default=None)):
+        return container.minute_research.list_validation_results(timeframe=timeframe)
+
+    @router.get("/research/minute/live-feature-view")
+    def get_minute_live_feature_view(asset: str = Query(default="BTC")):
+        return container.minute_research.build_live_feature_view(asset=asset)
+
     @router.get("/research/synthetic/samples")
     def list_synthetic_samples(
         asset: str | None = Query(default=None),
@@ -145,31 +235,6 @@ def build_router(container: Container) -> APIRouter:
     @router.get("/research/synthetic/results")
     def list_synthetic_results():
         return container.synthetic_research.list_reports(source="synthetic")
-
-    @router.post("/research/validation/run")
-    def run_real_validation_batch(
-        asset: str | None = Query(default="BTC"),
-        timeframe: str | None = Query(default=None),
-        strategy_name: str = Query(default="synthetic_momentum"),
-        limit: int = Query(default=50),
-        start: str | None = Query(default=None),
-        end: str | None = Query(default=None),
-    ):
-        try:
-            return container.synthetic_research.run_real_validation_batch(
-                asset=asset,
-                timeframe=timeframe,
-                strategy_name=strategy_name,
-                limit=limit,
-                start=parse_dt(start) if start else None,
-                end=parse_dt(end) if end else None,
-            )
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    @router.get("/research/validation/results")
-    def list_validation_results():
-        return container.synthetic_research.list_reports(source="real_validation")
 
     @router.get("/external-provider")
     def get_external_provider():

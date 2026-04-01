@@ -36,6 +36,54 @@ class BacktestRunRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
 
 
+class MinuteResearchRowRecord(Base):
+    __tablename__ = "minute_research_rows_cache"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    asset: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    decision_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
+    horizon_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    reference_price: Mapped[float] = mapped_column(Float, nullable=False)
+    close_5m: Mapped[float] = mapped_column(Float, nullable=False)
+    close_15m: Mapped[float] = mapped_column(Float, nullable=False)
+    label_up_5m: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    label_up_15m: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    future_return_5m: Mapped[float] = mapped_column(Float, nullable=False)
+    future_return_15m: Mapped[float] = mapped_column(Float, nullable=False)
+    source_provider: Mapped[str] = mapped_column(String, nullable=False)
+    market_id: Mapped[str | None] = mapped_column(String, index=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+
+class MinuteFeatureSnapshotRecord(Base):
+    __tablename__ = "minute_feature_snapshots_cache"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    row_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    asset: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    decision_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+
+class MinuteBatchReportRecord(Base):
+    __tablename__ = "minute_batch_reports_cache"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    strategy_name: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    asset_filter: Mapped[str | None] = mapped_column(String)
+    timeframe_filter: Mapped[str | None] = mapped_column(String)
+    total_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    metrics: Mapped[list] = mapped_column(JSON, nullable=False)
+    coverage: Mapped[dict] = mapped_column(JSON, nullable=False)
+    records: Mapped[list] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+
 class SyntheticMarketSampleRecord(Base):
     __tablename__ = "synthetic_market_samples_cache"
 

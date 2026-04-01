@@ -3,17 +3,16 @@
 import { useMemo, useState, useTransition } from "react";
 
 import {
-  buildSyntheticSamples,
-  fetchResearchStrategies,
-  runRealValidationBatch,
-  runSyntheticBatch,
+  buildMinuteRows,
+  runMinuteBatch,
+  runMinuteValidationBatch,
+  type MinuteBatchReport,
+  type MinuteResearchRow,
   type Strategy,
-  type SyntheticBatchReport,
-  type SyntheticMarketSample,
 } from "../lib/api";
 import { formatLosAngelesDateTime } from "../lib/time";
 
-function metric(report: SyntheticBatchReport | undefined, label: string): number {
+function metric(report: MinuteBatchReport | undefined, label: string): number {
   return report?.metrics.find((item) => item.label === label)?.value ?? 0;
 }
 
@@ -22,51 +21,53 @@ function pct(value: number): string {
 }
 
 export function ResearchView({
-  initialSamples,
-  initialSyntheticReports,
+  initialRows,
+  initialMinuteReports,
   initialValidationReports,
   initialStrategies,
 }: {
-  initialSamples: SyntheticMarketSample[];
-  initialSyntheticReports: SyntheticBatchReport[];
-  initialValidationReports: SyntheticBatchReport[];
+  initialRows: MinuteResearchRow[];
+  initialMinuteReports: MinuteBatchReport[];
+  initialValidationReports: MinuteBatchReport[];
   initialStrategies: Strategy[];
 }) {
-  const [samples, setSamples] = useState(initialSamples);
-  const [syntheticReports, setSyntheticReports] = useState(initialSyntheticReports);
+  const [rows, setRows] = useState(initialRows);
+  const [minuteReports, setMinuteReports] = useState(initialMinuteReports);
   const [validationReports, setValidationReports] = useState(initialValidationReports);
   const [strategies] = useState(initialStrategies);
   const [asset, setAsset] = useState("BTC");
   const [timeframe, setTimeframe] = useState<"all" | "crypto_5m" | "crypto_15m">("all");
-  const [strategyName, setStrategyName] = useState(initialStrategies[0]?.name ?? "synthetic_momentum");
-  const [decisionTime, setDecisionTime] = useState("open");
+  const [strategyName, setStrategyName] = useState(initialStrategies[0]?.name ?? "minute_momentum");
   const [startTime, setStartTime] = useState(defaultRangeStart());
   const [endTime, setEndTime] = useState(defaultRangeEnd());
   const [isPending, startTransition] = useTransition();
-  const latestSynthetic = syntheticReports[0];
-  const latestValidation = validationReports[0];
 
-  const filteredSamples = useMemo(() => {
-    return samples.filter((sample) => sample.asset === asset && (timeframe === "all" || sample.timeframe === timeframe));
-  }, [asset, samples, timeframe]);
+  const latest5m = minuteReports.find((report) => report.timeframe_filter === "crypto_5m");
+  const latest15m = minuteReports.find((report) => report.timeframe_filter === "crypto_15m");
+  const latestValidation5m = validationReports.find((report) => report.timeframe_filter === "crypto_5m");
+  const latestValidation15m = validationReports.find((report) => report.timeframe_filter === "crypto_15m");
 
-  const onBuildSynthetic = () => {
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => row.asset === asset);
+  }, [asset, rows]);
+
+  const onBuildRows = () => {
     startTransition(async () => {
-      const next = await buildSyntheticSamples(asset, timeframe === "all" ? undefined : timeframe, toIso(startTime), toIso(endTime));
-      setSamples(next);
+      const next = await buildMinuteRows(asset, toIso(startTime), toIso(endTime), true);
+      setRows(next);
     });
   };
 
-  const onRunSynthetic = () => {
+  const onRunBatch = (selectedTimeframe: "crypto_5m" | "crypto_15m") => {
     startTransition(async () => {
-      const report = await runSyntheticBatch(asset, timeframe === "all" ? undefined : timeframe, strategyName, decisionTime, 200, toIso(startTime), toIso(endTime));
-      setSyntheticReports((current) => [report, ...current.filter((item) => item.run_id !== report.run_id)]);
+      const report = await runMinuteBatch(asset, selectedTimeframe, strategyName, 500, toIso(startTime), toIso(endTime), false);
+      setMinuteReports((current) => [report, ...current.filter((item) => item.run_id !== report.run_id)]);
     });
   };
 
-  const onRunValidation = () => {
+  const onRunValidation = (selectedTimeframe: "crypto_5m" | "crypto_15m") => {
     startTransition(async () => {
-      const report = await runRealValidationBatch(asset, timeframe === "all" ? undefined : timeframe, strategyName, 50, toIso(startTime), toIso(endTime));
+      const report = await runMinuteValidationBatch(asset, selectedTimeframe, strategyName, 50, toIso(startTime), toIso(endTime), false);
       setValidationReports((current) => [report, ...current.filter((item) => item.run_id !== report.run_id)]);
     });
   };
@@ -75,51 +76,57 @@ export function ResearchView({
     <div className="page-grid page-shell">
       <section className="panel span-2">
         <div className="section-head">
-          <p className="eyebrow">Synthetic research</p>
+          <p className="eyebrow">Minute research</p>
           <div className="hero-title-row">
-            <h1>BTC up/down discovery lab</h1>
+            <h1>BTC 5m / 15m edge lab</h1>
             <div className="badge-stack">
-              <span className="badge badge-historical">layer 1 synthetic</span>
+              <span className="badge badge-historical">layer 1 minute history</span>
               <span className="badge badge-real">layer 2 real validation</span>
             </div>
           </div>
           <p className="muted">
-            Generate aligned 1-minute BTC/ETH/SOL windows, score simple strategy families, and compare the synthetic edge to real closed Polymarket BTC markets.
+            Build minute-aligned BTC rows from your local 1-minute CSVs, score simple directional strategies, and compare the same logic against recent closed Polymarket markets.
           </p>
         </div>
 
         <div className="edge-card-grid">
           <div className="metric-card">
-            <span className="metric-label">Synthetic samples</span>
-            <span className="metric-value">{samples.length}</span>
-            <span className="muted">Cached locally and persisted when available.</span>
+            <span className="metric-label">Minute rows</span>
+            <span className="metric-value">{rows.length}</span>
+            <span className="muted">Cached once and reused across runs.</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Latest synthetic hit rate</span>
-            <span className="metric-value">{latestSynthetic ? pct(metric(latestSynthetic, "hit_rate")) : "n/a"}</span>
-            <span className="muted">Bars-only synthetic history.</span>
+            <span className="metric-label">5m synthetic hit rate</span>
+            <span className="metric-value">{latest5m ? pct(metric(latest5m, "hit_rate")) : "n/a"}</span>
+            <span className="muted">Minute-level history, no lookahead.</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Latest validation hit rate</span>
-            <span className="metric-value">{latestValidation ? pct(metric(latestValidation, "hit_rate")) : "n/a"}</span>
-            <span className="muted">Real closed Polymarket BTC markets.</span>
+            <span className="metric-label">15m synthetic hit rate</span>
+            <span className="metric-value">{latest15m ? pct(metric(latest15m, "hit_rate")) : "n/a"}</span>
+            <span className="muted">Same strategy family, longer horizon.</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Strategies</span>
-            <span className="metric-value">{strategies.length}</span>
-            <span className="muted">Momentum, mean reversion, breakout, regime filter.</span>
+            <span className="metric-label">Real validation</span>
+            <span className="metric-value">{latestValidation5m || latestValidation15m ? "cached" : "none"}</span>
+            <span className="muted">Closed Polymarket BTC markets scored separately.</span>
           </div>
         </div>
 
         <div className="badge-stack">
-          <button className="badge badge-type" onClick={onBuildSynthetic} disabled={isPending}>
-            {isPending ? "working..." : "build synthetic dataset"}
+          <button className="badge badge-type" onClick={onBuildRows} disabled={isPending}>
+            {isPending ? "working..." : "build minute dataset"}
           </button>
-          <button className="badge badge-provider" onClick={onRunSynthetic} disabled={isPending}>
-            run synthetic batch
+          <button className="badge badge-provider" onClick={() => onRunBatch("crypto_5m")} disabled={isPending}>
+            run 5m batch
           </button>
-          <button className="badge badge-real" onClick={onRunValidation} disabled={isPending}>
-            run real validation
+          <button className="badge badge-provider" onClick={() => onRunBatch("crypto_15m")} disabled={isPending}>
+            run 15m batch
+          </button>
+          <button className="badge badge-real" onClick={() => onRunValidation("crypto_5m")} disabled={isPending}>
+            validate 5m
+          </button>
+          <button className="badge badge-real" onClick={() => onRunValidation("crypto_15m")} disabled={isPending}>
+            validate 15m
           </button>
         </div>
       </section>
@@ -127,7 +134,7 @@ export function ResearchView({
       <section className="panel">
         <div className="section-head">
           <h2>Run controls</h2>
-          <p className="muted">Pick an asset, timeframe, and strategy family.</p>
+          <p className="muted">Choose the asset, strategy, and historical range.</p>
         </div>
         <div className="stack">
           <label className="list-card">
@@ -136,14 +143,6 @@ export function ResearchView({
               <option value="BTC">BTC</option>
               <option value="ETH">ETH</option>
               <option value="SOL">SOL</option>
-            </select>
-          </label>
-          <label className="list-card">
-            <span className="metric-label">Timeframe</span>
-            <select className="research-select" value={timeframe} onChange={(event) => setTimeframe(event.target.value as typeof timeframe)}>
-              <option value="all">All</option>
-              <option value="crypto_5m">BTC 5m</option>
-              <option value="crypto_15m">BTC 15m</option>
             </select>
           </label>
           <label className="list-card">
@@ -157,12 +156,11 @@ export function ResearchView({
             </select>
           </label>
           <label className="list-card">
-            <span className="metric-label">Decision time</span>
-            <select className="research-select" value={decisionTime} onChange={(event) => setDecisionTime(event.target.value)}>
-              <option value="open">open</option>
-              <option value="+1m">+1m</option>
-              <option value="+2m">+2m</option>
-              <option value="+3m">+3m</option>
+            <span className="metric-label">Timeframe filter</span>
+            <select className="research-select" value={timeframe} onChange={(event) => setTimeframe(event.target.value as typeof timeframe)}>
+              <option value="all">All</option>
+              <option value="crypto_5m">BTC 5m</option>
+              <option value="crypto_15m">BTC 15m</option>
             </select>
           </label>
           <label className="list-card">
@@ -179,71 +177,83 @@ export function ResearchView({
       <section className="panel span-2">
         <div className="section-head">
           <h2>Latest reports</h2>
-          <p className="muted">The same strategies are scored first on the synthetic layer and then on recent real closed markets.</p>
+          <p className="muted">Synthetic discovery and real Polymarket validation stay separate.</p>
         </div>
         <div className="edge-card-grid">
           <div className="metric-card">
-            <span className="metric-label">Synthetic report</span>
-            <span className="metric-value">{latestSynthetic?.strategy_name ?? "none"}</span>
-            <span className="muted">{latestSynthetic ? `${latestSynthetic.total_samples} samples | ${latestSynthetic.source}` : "Run a synthetic batch to populate this panel."}</span>
+            <span className="metric-label">Synthetic 5m</span>
+            <span className="metric-value">{latest5m?.strategy_name ?? "none"}</span>
+            <span className="muted">{latest5m ? `${latest5m.total_rows} rows | ${pct(metric(latest5m, "hit_rate"))}` : "Run the 5m batch to populate this panel."}</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Validation report</span>
-            <span className="metric-value">{latestValidation?.strategy_name ?? "none"}</span>
-            <span className="muted">{latestValidation ? `${latestValidation.total_samples} closed markets | ${latestValidation.source}` : "Run real validation to populate this panel."}</span>
+            <span className="metric-label">Synthetic 15m</span>
+            <span className="metric-value">{latest15m?.strategy_name ?? "none"}</span>
+            <span className="muted">{latest15m ? `${latest15m.total_rows} rows | ${pct(metric(latest15m, "hit_rate"))}` : "Run the 15m batch to populate this panel."}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Validation 5m</span>
+            <span className="metric-value">{latestValidation5m?.strategy_name ?? "none"}</span>
+            <span className="muted">{latestValidation5m ? `${latestValidation5m.total_rows} markets | ${pct(metric(latestValidation5m, "hit_rate"))}` : "Run real validation for 5m markets."}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Validation 15m</span>
+            <span className="metric-value">{latestValidation15m?.strategy_name ?? "none"}</span>
+            <span className="muted">{latestValidation15m ? `${latestValidation15m.total_rows} markets | ${pct(metric(latestValidation15m, "hit_rate"))}` : "Run real validation for 15m markets."}</span>
           </div>
         </div>
       </section>
 
       <section className="panel span-2">
         <div className="section-head">
-          <h2>Cached samples</h2>
-          <p className="muted">Synthetic BTC/ETH/SOL windows are stored once and reused across runs.</p>
+          <h2>Recent minute rows</h2>
+          <p className="muted">Each row is one decision minute with 5m and 15m labels already aligned.</p>
         </div>
         <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Sample</th>
-                <th>Source</th>
-                <th>Window</th>
-                <th>Open</th>
-                <th>Close</th>
-                <th>Resolution</th>
+                <th>Decision time</th>
+                <th>Asset</th>
+                <th>Reference</th>
+                <th>5m label</th>
+                <th>15m label</th>
+                <th>5m return</th>
+                <th>15m return</th>
               </tr>
             </thead>
             <tbody>
-              {filteredSamples.length ? (
-                filteredSamples.slice(0, 20).map((sample) => (
-                  <tr key={sample.sample_id}>
+              {filteredRows.length ? (
+                filteredRows.slice(0, 20).map((row) => (
+                  <tr key={row.row_id}>
+                    <td>{formatLosAngelesDateTime(row.decision_time)}</td>
                     <td>
                       <div className="market-title-cell">
-                        <span className="market-name">{sample.sample_id}</span>
+                        <span className="market-name">{row.asset}</span>
                         <div className="badge-stack">
-                          <span className="badge badge-type">{sample.asset}</span>
-                          <span className="badge badge-provider">{sample.timeframe}</span>
+                          <span className="badge badge-type">{row.source}</span>
+                          <span className="badge badge-provider">{row.source_provider}</span>
                         </div>
                       </div>
                     </td>
+                    <td>{formatPrice(row.reference_price)}</td>
                     <td>
-                      <span className={`badge ${sample.source === "synthetic" ? "badge-historical" : "badge-real"}`}>
-                        {sample.source}
+                      <span className={`badge ${row.label_up_5m ? "badge-buy" : "badge-sell"}`}>
+                        {row.label_up_5m ? "UP" : "DOWN"}
                       </span>
                     </td>
-                    <td>{sample.decision_horizon_minutes}m</td>
-                    <td>{formatLosAngelesDateTime(sample.market_open_time)}</td>
-                    <td>{formatLosAngelesDateTime(sample.market_close_time)}</td>
                     <td>
-                      <span className={`badge ${sample.actual_resolution === "yes" ? "badge-buy" : "badge-sell"}`}>
-                        {sample.actual_resolution.toUpperCase()}
+                      <span className={`badge ${row.label_up_15m ? "badge-buy" : "badge-sell"}`}>
+                        {row.label_up_15m ? "UP" : "DOWN"}
                       </span>
                     </td>
+                    <td>{pct(row.future_return_5m)}</td>
+                    <td>{pct(row.future_return_15m)}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="muted">
-                    No cached samples yet. Build the synthetic dataset to populate this table.
+                  <td colSpan={7} className="muted">
+                    No minute rows cached yet. Build the dataset to populate this table.
                   </td>
                 </tr>
               )}
@@ -275,4 +285,11 @@ function toIso(value: string): string | undefined {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return undefined;
   return parsed.toISOString();
+}
+
+function formatPrice(value: number): string {
+  if (Number.isInteger(value)) {
+    return value.toFixed(0);
+  }
+  return value.toFixed(2);
 }
