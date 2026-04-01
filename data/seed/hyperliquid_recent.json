@@ -1,0 +1,29 @@
+{
+  "BTC": {
+    "bars": [
+      {"ts": "2026-03-31T11:58:00Z", "open": 84500, "high": 84520, "low": 84490, "close": 84510, "volume": 12.5},
+      {"ts": "2026-03-31T11:59:00Z", "open": 84510, "high": 84540, "low": 84505, "close": 84529, "volume": 15.0}
+    ],
+    "trades": [
+      {"ts": "2026-03-31T11:58:12Z", "sequence": 1, "price": 84508, "size": 0.25, "side": "buy", "aggressor_side": "buy"},
+      {"ts": "2026-03-31T11:58:42Z", "sequence": 2, "price": 84504, "size": 0.18, "side": "sell", "aggressor_side": "sell"}
+    ],
+    "orderbook_snapshots": [
+      {"ts": "2026-03-31T11:59:45Z", "sequence": 10, "best_bid": 84528, "best_ask": 84530, "bid_size": 1.2, "ask_size": 1.0, "mid_price": 84529, "depth": {"bids": [[84528, 1.2]], "asks": [[84530, 1.0]]}}
+    ]
+  },
+  "ETH": {
+    "bars": [
+      {"ts": "2026-03-31T12:06:00Z", "open": 4290, "high": 4294, "low": 4289, "close": 4292, "volume": 55.0}
+    ],
+    "trades": [],
+    "orderbook_snapshots": []
+  },
+  "SOL": {
+    "bars": [
+      {"ts": "2026-03-31T12:00:00Z", "open": 190, "high": 191, "low": 189.5, "close": 190.5, "volume": 120.0}
+    ],
+    "trades": [],
+    "orderbook_snapshots": []
+  }
+}

@@ -1,6 +1,6 @@
 # Polymarket Trader
 
-Research-first Polymarket platform for short-horizon crypto markets. The current repo is aimed at observation, replay, baseline backtesting, and dry-run paper workflows. It is not claiming live-trading readiness.
+Research-first Polymarket platform for short-horizon crypto markets. The current repo is aimed at observation, layered closed-market evaluation, baseline backtesting, and dry-run paper workflows. It is not claiming live-trading readiness and it is not yet a full historical Polymarket trade replay engine.
 
 ## Getting Started
 
@@ -70,7 +70,7 @@ PowerShell:
 6. Open [http://localhost:8000/healthz](http://localhost:8000/healthz) and [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health).
 7. Open one market detail page from the dashboard.
 8. If you want real observation next, flip the Polymarket mock flags in `.env` and restart.
-9. If you want backtests on your own data next, switch the external provider to `csv` and point `CSV_PROVIDER_PATHS` to your files.
+9. If you want closed-market evaluation on your own data next, switch the external provider to `csv` and point the CSV paths to your files.
 
 ## Run Modes
 
@@ -120,24 +120,28 @@ What is not claimed:
 
 ### Historical backtest mode
 
-Best for replaying your own 1-minute datasets.
+Best for evaluating closed Polymarket 5m and 15m markets against your own 1-minute historical datasets.
 
 Use:
 
 ```bash
 EXTERNAL_HISTORICAL_PROVIDER=csv
 USE_MOCK_EXTERNAL_PROVIDER=false
-CSV_PROVIDER_PATHS={"BTC":"data/datasets/BTCUSD-1m-104wks-data.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/SOLUSD-1m-104wks-data.csv"}
+CSV_BTC_PATH=data/datasets/BTCUSD-1m-104wks-data.csv
+CSV_ETH_PATH=data/datasets/eth_1m.csv
+CSV_SOL_PATH=data/datasets/SOLUSD-1m-104wks-data.csv
+USE_MOCK_HYPERLIQUID_RECENT=false
 ```
 
 What it does today:
 - loads local 1-minute CSV bars into normalized `OHLCVBar` records
-- recomputes features bar by bar
-- replays sequentially through the current baseline backtester
-- outputs trade list, equity curve, net PnL, drawdown, and expectancy
+- validates dataset shape, time coverage, and duplicate timestamps
+- evaluates recent closed Polymarket crypto markets in batch
+- compares bars-only versus bars-plus-Hyperliquid-enriched results
+- stores per-market evaluation records and aggregate comparison metrics
 
 Truthful limitation:
-- the backtester is usable for baseline research, but the execution model is still intentionally simple rather than microstructure-realistic
+- this is a layered closed-market evaluator, not a full historical Polymarket trade-replay engine
 
 ### Live paper mode
 
@@ -169,7 +173,7 @@ Truthful limitation:
 The repo now supports local 1-minute CSV datasets through the provider layer without changing downstream code.
 
 Expected CSV columns:
-- `ts` or `timestamp`
+- `timestamp`, `datetime`, `ts`, or `date`
 - `open`
 - `high`
 - `low`
@@ -181,7 +185,9 @@ Example config:
 ```bash
 EXTERNAL_HISTORICAL_PROVIDER=csv
 USE_MOCK_EXTERNAL_PROVIDER=false
-CSV_PROVIDER_PATHS={"BTC":"data/datasets/BTCUSD-1m-104wks-data.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/SOLUSD-1m-104wks-data.csv"}
+CSV_BTC_PATH=data/datasets/BTCUSD-1m-104wks-data.csv
+CSV_ETH_PATH=data/datasets/eth_1m.csv
+CSV_SOL_PATH=data/datasets/SOLUSD-1m-104wks-data.csv
 EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}
 ```
 
@@ -189,11 +195,68 @@ The repo now includes these local 1-minute datasets:
 - `data/datasets/BTCUSD-1m-104wks-data.csv`
 - `data/datasets/SOLUSD-1m-104wks-data.csv`
 
+Startup validation reports:
+- symbol
+- row count
+- first timestamp
+- last timestamp
+- duplicate count
+- schema issues
+
+You can inspect this through:
+- `GET /api/v1/external-provider`
+- `GET /api/v1/system/health`
+
 Downstream modules remain provider-agnostic:
 - feature engine reads normalized bars
 - market-window service reads normalized bars
 - backtester reads normalized bars
 - UI reads API output, not provider payloads
+
+## Hyperliquid Recent Enrichment Layer
+
+The second layer is recent Hyperliquid data used for enrichment where available.
+
+Config:
+
+```bash
+HYPERLIQUID_INFO_URL=https://api.hyperliquid.xyz/info
+USE_MOCK_HYPERLIQUID_RECENT=false
+HYPERLIQUID_RECENT_TRADE_LIMIT=500
+HYPERLIQUID_RECENT_LOOKBACK_MINUTES=240
+```
+
+What it is used for:
+- recent external CVD
+- rolling external CVD
+- recent trade imbalance
+- recent external returns
+- recent realized volatility
+- current top-of-book imbalance for open markets when available
+
+Important limits:
+- Hyperliquid candle snapshots have limited retention
+- recent trade coverage is best for recent windows, not deep history
+- current L2 book is used for open/live contexts, not for closed historical windows
+- if a source is unavailable, the evaluator skips those features cleanly and records that fact
+
+## Closed Polymarket Evaluation Workflow
+
+This repo now supports a practical layered evaluator for closed Polymarket 5m and 15m crypto markets.
+
+Current evaluation flow:
+1. discover recent closed Polymarket crypto markets
+2. classify underlying and timeframe
+3. load the relevant historical bar window from the CSV provider
+4. add recent Hyperliquid trades and candles where available
+5. compute point-in-time feature snapshots through the same feature pipeline used by live workflows
+6. generate a decision timeline and final decision
+7. compare the final decision with the actual market outcome or a derived close-vs-strike outcome when needed
+
+What this does not mean:
+- this is not a historical Polymarket trade-by-trade replay engine
+- this does not reconstruct historical Polymarket queue position or fills
+- this does not claim full historical Hyperliquid depth or long-horizon historical trades
 
 ## Environment Notes
 
@@ -208,10 +271,14 @@ Most important flags:
   websocket endpoint for live Polymarket market events.
 - `EXTERNAL_HISTORICAL_PROVIDER`
   Selects the historical source used by research flows. Current practical options are `binance` and `csv`.
+- `CSV_BTC_PATH`, `CSV_ETH_PATH`, `CSV_SOL_PATH`
+  Explicit local dataset paths for the first historical layer.
 - `CSV_PROVIDER_PATHS`
-  Maps internal symbols such as `BTC`, `ETH`, and `SOL` to local CSV file paths.
+  Optional JSON mapping kept for compatibility with the provider factory.
 - `EXTERNAL_PROVIDER_SYMBOL_MAP`
   Keeps internal symbols decoupled from vendor-specific symbol strings.
+- `USE_MOCK_HYPERLIQUID_RECENT`
+  Switches the recent Hyperliquid enrichment layer between mock and real mode.
 
 ## One-Command Startup
 
@@ -243,6 +310,8 @@ Sample checks:
 curl http://localhost:8000/healthz
 curl http://localhost:8000/api/v1/system/health
 curl http://localhost:8000/api/v1/markets
+curl http://localhost:8000/api/v1/external-provider
+curl "http://localhost:8000/api/v1/evaluations/closed-markets?asset=BTC&timeframe=crypto_5m&limit=10"
 ```
 
 Expected mock-mode signs:
@@ -272,6 +341,10 @@ Expected real-observation signs:
   - current external provider
   - connection status
   - last event time
+- Backtests page shows:
+  - recent closed eligible markets
+  - bars-only versus enriched comparison
+  - enrichment coverage notes
 - If using CSV backtests, the configured file paths exist and the files have the required columns.
 - If using real observation mode, the dashboard shows live venue badges and a recent event timestamp.
 
@@ -300,14 +373,63 @@ Expected real-observation signs:
 
 - Verify `EXTERNAL_HISTORICAL_PROVIDER=csv`.
 - Verify `USE_MOCK_EXTERNAL_PROVIDER=false`.
-- Verify each `CSV_PROVIDER_PATHS` file exists relative to the repo root or as an absolute path.
-- Verify the CSV has `ts` or `timestamp`, plus `open/high/low/close/volume`.
+- Verify `CSV_BTC_PATH`, `CSV_ETH_PATH`, and `CSV_SOL_PATH` are correct for the symbols you want to evaluate.
+- Verify the CSV has `timestamp` or `datetime`, plus `open/high/low/close/volume`.
+
+### Hyperliquid enrichment is missing
+
+- Check `USE_MOCK_HYPERLIQUID_RECENT`.
+- Check `HYPERLIQUID_INFO_URL`.
+- Check the evaluation record notes and coverage counts.
+- Older closed markets may legitimately have bars only because recent Hyperliquid retention does not reach that far back.
 
 ### Paper loop is not running
 
 - Verify `PAPER_TRADING_LOOP_ENABLED=true`.
 - Check `/api/v1/paper-trading/status`.
 - The current paper loop is dry-run only and intentionally simple. It is for monitoring and research, not live execution.
+
+## Practical Runbook
+
+1. Place your CSV datasets in `data/datasets/` or set absolute paths in `.env`.
+2. Set:
+
+```bash
+EXTERNAL_HISTORICAL_PROVIDER=csv
+USE_MOCK_EXTERNAL_PROVIDER=false
+USE_MOCK_HYPERLIQUID_RECENT=false
+```
+
+3. Start the stack:
+
+```bash
+docker compose --env-file .env -f infrastructure/docker-compose.yml up --build
+```
+
+4. Inspect dataset validation:
+
+```bash
+curl http://localhost:8000/api/v1/external-provider
+```
+
+5. List recent closed markets eligible for evaluation:
+
+```bash
+curl "http://localhost:8000/api/v1/evaluations/closed-markets?asset=BTC&timeframe=crypto_5m&limit=10"
+```
+
+6. Run a baseline-versus-enriched comparison:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/evaluations/compare?asset=BTC&timeframe=crypto_5m&limit=10"
+```
+
+7. Open [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) to inspect:
+- eligible closed markets
+- bars-only vs bars-plus-Hyperliquid comparison
+- coverage and missing-data notes
+
+8. For open markets, switch to real observation mode and use the same feature stack through market detail and paper-trading pages.
 
 ## API Surface
 
@@ -323,6 +445,11 @@ Expected real-observation signs:
 - `POST /api/v1/backtests/{market_id}`
 - `GET /api/v1/backtests`
 - `GET /api/v1/backtests/{run_id}`
+- `GET /api/v1/evaluations/closed-markets`
+- `POST /api/v1/evaluations/closed-markets/run`
+- `GET /api/v1/evaluations/results`
+- `POST /api/v1/evaluations/compare`
+- `GET /api/v1/markets/{market_id}/live-feature-view`
 - `GET /api/v1/paper-trading/blotter`
 - `GET /api/v1/paper-trading/status`
 - `POST /api/v1/paper-trading/run/{market_id}`
@@ -349,7 +476,7 @@ Expected real-observation signs:
 ## Truthful Current Status
 
 - Real Polymarket observation mode is usable for multi-hour monitoring.
-- Historical backtesting is usable for baseline bar-by-bar research on local 1-minute CSV datasets.
+- Closed-market evaluation is usable for baseline research on local 1-minute CSV datasets plus recent Hyperliquid enrichment where available.
 - Live paper mode is partial but useful for continuous dry-run monitoring.
 - Live execution is not implemented.
 - Weather and broader market-type expansion are not part of the current usable local workflow.

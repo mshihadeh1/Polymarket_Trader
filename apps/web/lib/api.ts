@@ -54,6 +54,14 @@ export type FeatureSnapshot = {
   venue_divergence?: number;
 };
 
+export type FeatureAvailability = {
+  bars_available: boolean;
+  trades_available: boolean;
+  orderbook_available: boolean;
+  enriched_with_hyperliquid: boolean;
+  notes: string[];
+};
+
 export type Strategy = {
   name: string;
   family: string;
@@ -87,6 +95,41 @@ export type BacktestReport = {
     unrealized_pnl: number;
     position: number;
   }[];
+};
+
+export type ClosedMarketEvaluationRecord = {
+  market_id: string;
+  market_slug: string;
+  asset: string;
+  timeframe: string;
+  market_open_time: string;
+  market_close_time: string;
+  strike_price?: number;
+  actual_resolution: "yes" | "no" | "unknown";
+  actual_resolution_source?: string;
+  historical_window_start?: string;
+  historical_window_end?: string;
+  enrichment_availability: FeatureAvailability;
+  feature_snapshot_summary: Record<string, number | string | null>;
+  final_decision: string;
+  final_confidence: number;
+  final_signal_value: number;
+  correctness?: boolean | null;
+  notes: string[];
+};
+
+export type ClosedMarketBatchReport = {
+  run_id: string;
+  strategy_name: string;
+  mode: "bars_only" | "bars_plus_hyperliquid";
+  asset_filter?: string;
+  timeframe_filter?: string;
+  limit: number;
+  created_at?: string;
+  total_markets_evaluated: number;
+  metrics: { label: string; value: number }[];
+  coverage: Record<string, number>;
+  records: ClosedMarketEvaluationRecord[];
 };
 
 export type PaperStatus = {
@@ -248,6 +291,70 @@ export async function fetchSystemHealth(): Promise<{
   });
   if (!response.ok) {
     throw new Error("Failed to fetch system health");
+  }
+  return response.json();
+}
+
+export async function fetchClosedMarkets(asset?: string, timeframe?: string, limit = 25): Promise<{
+  market_id: string;
+  slug: string;
+  title: string;
+  asset: string;
+  timeframe: string;
+  market_open_time: string;
+  market_close_time: string;
+  strike_price?: number;
+  resolution_source?: string;
+}[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (asset) params.set("asset", asset);
+  if (timeframe) params.set("timeframe", timeframe);
+  const response = await fetch(`${baseUrl}/api/v1/evaluations/closed-markets?${params.toString()}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch closed markets");
+  }
+  return response.json();
+}
+
+export async function runClosedMarketComparison(asset?: string, timeframe?: string, limit = 20): Promise<{
+  bars_only: ClosedMarketBatchReport;
+  bars_plus_hyperliquid: ClosedMarketBatchReport;
+}> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (asset) params.set("asset", asset);
+  if (timeframe) params.set("timeframe", timeframe);
+  const response = await fetch(`${baseUrl}/api/v1/evaluations/compare?${params.toString()}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to compare closed market batches");
+  }
+  return response.json();
+}
+
+export async function fetchClosedMarketResults(): Promise<ClosedMarketBatchReport[]> {
+  const response = await fetch(`${baseUrl}/api/v1/evaluations/results`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch closed-market results");
+  }
+  return response.json();
+}
+
+export async function fetchLiveFeatureView(marketId: string): Promise<{
+  market_id: string;
+  market_type: string;
+  asset: string;
+  status: string;
+  snapshot: FeatureSnapshot;
+  availability: FeatureAvailability | Record<string, unknown>;
+  notes: string[];
+}> {
+  const response = await fetch(`${baseUrl}/api/v1/markets/${marketId}/live-feature-view`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch live feature view");
   }
   return response.json();
 }

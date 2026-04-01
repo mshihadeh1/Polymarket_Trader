@@ -69,6 +69,17 @@ class SymbolMapping(BaseModel):
     provider_name: str
 
 
+class DatasetValidationReport(BaseModel):
+    symbol: str
+    provider: str
+    path: str
+    row_count: int = 0
+    first_timestamp: datetime | None = None
+    last_timestamp: datetime | None = None
+    duplicate_count: int = 0
+    schema_issues: list[str] = Field(default_factory=list)
+
+
 class OHLCVBar(BaseModel):
     ts: datetime
     symbol: str
@@ -236,6 +247,14 @@ class FeatureSnapshot(BaseModel):
         return self.external_trade_imbalance
 
 
+class FeatureAvailability(BaseModel):
+    bars_available: bool = False
+    trades_available: bool = False
+    orderbook_available: bool = False
+    enriched_with_hyperliquid: bool = False
+    notes: list[str] = Field(default_factory=list)
+
+
 class MarketDetail(MarketSummary):
     rules: list[MarketRule] = Field(default_factory=list)
     latest_polymarket_orderbook: OrderBookSnapshot | None = None
@@ -322,6 +341,41 @@ class BacktestReport(BaseModel):
     trades: list[BacktestTrade] = Field(default_factory=list)
     equity_curve: list[EquityPoint] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+
+
+class ClosedMarketEvaluationRecord(BaseModel):
+    market_id: UUID
+    market_slug: str
+    asset: str
+    timeframe: str
+    market_open_time: datetime
+    market_close_time: datetime
+    strike_price: float | None = None
+    actual_resolution: Literal["yes", "no", "unknown"] = "unknown"
+    actual_resolution_source: str | None = None
+    historical_window_start: datetime | None = None
+    historical_window_end: datetime | None = None
+    enrichment_availability: FeatureAvailability = Field(default_factory=FeatureAvailability)
+    feature_snapshot_summary: dict[str, float | str | None] = Field(default_factory=dict)
+    final_decision: str = "hold"
+    final_confidence: float = 0.0
+    final_signal_value: float = 0.0
+    correctness: bool | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class ClosedMarketBatchReport(BaseModel):
+    run_id: str
+    strategy_name: str
+    mode: Literal["bars_only", "bars_plus_hyperliquid"]
+    asset_filter: str | None = None
+    timeframe_filter: str | None = None
+    limit: int = 0
+    created_at: datetime | None = None
+    total_markets_evaluated: int = 0
+    metrics: list[BacktestMetric] = Field(default_factory=list)
+    coverage: dict[str, int] = Field(default_factory=dict)
+    records: list[ClosedMarketEvaluationRecord] = Field(default_factory=list)
 
 
 class PaperTradeDecision(BaseModel):

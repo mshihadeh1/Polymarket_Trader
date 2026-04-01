@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from packages.clients.hyperliquid_client import MockHyperliquidClient, RealHyperliquidClient
 from packages.clients.market_data_provider import HistoricalMarketDataProvider, build_historical_market_data_provider
 from packages.clients.polymarket_client import MockPolymarketClient, PolymarketClient, RealPolymarketClient
 from packages.config import Settings
@@ -19,6 +21,8 @@ from services.polymarket_ingestor import PolymarketIngestorService
 from services.rules_engine import RulesEngineService
 from services.state import InMemoryState
 from polymarket_trader.replay import ReplayService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -56,8 +60,10 @@ class Container:
             self.state.polymarket_raw_events.clear()
             self.state.polymarket_raw_envelopes.clear()
             self.state.external_raw_payloads.clear()
+            self.state.external_feature_availability.clear()
             self.state.feature_snapshots.clear()
             self.state.backtest_reports.clear()
+            self.state.closed_market_batch_reports.clear()
             self.state.paper_decisions.clear()
             self.state.polymarket_observation.source_mode = "mock" if self.polymarket_client.is_mock else "real"
             self.state.polymarket_observation.stream_task_running = False
@@ -98,7 +104,20 @@ def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Cont
     root = Path(__file__).resolve().parents[4]
     polymarket_client = build_polymarket_client(settings, root=root)
     external_provider = build_historical_market_data_provider(settings, root=root)
+    hyperliquid_recent_client = build_hyperliquid_recent_client(settings, root=root)
     persistence = ResearchPersistence(create_session_factory(settings))
+    if hasattr(external_provider, "validate_datasets"):
+        for report in external_provider.validate_datasets():
+            state.external_dataset_validation[report.symbol] = report
+            logger.info(
+                "CSV dataset validation symbol=%s rows=%s first=%s last=%s duplicates=%s issues=%s",
+                report.symbol,
+                report.row_count,
+                report.first_timestamp,
+                report.last_timestamp,
+                report.duplicate_count,
+                report.schema_issues,
+            )
     market_window = MarketWindowService(state)
     feature_windows = [int(value.strip()) for value in settings.feature_trade_windows.split(",") if value.strip()]
     feature_engine = FeatureEngineService(
@@ -108,15 +127,23 @@ def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Cont
         fair_value_model=BaselineFairValueModel(),
         persistence=persistence,
     )
+    hyperliquid_ingestor = HyperliquidIngestorService(state, provider=external_provider, recent_client=hyperliquid_recent_client)
     container = Container(
         settings=settings,
         state=state,
         market_catalog=MarketCatalogService(state),
         polymarket_ingestor=PolymarketIngestorService(state, client=polymarket_client, persistence=persistence),
-        hyperliquid_ingestor=HyperliquidIngestorService(state, provider=external_provider),
+        hyperliquid_ingestor=hyperliquid_ingestor,
         market_window=market_window,
         feature_engine=feature_engine,
-        backtester=BacktesterService(settings=settings, state=state, feature_engine=feature_engine, persistence=persistence),
+        backtester=BacktesterService(
+            settings=settings,
+            state=state,
+            feature_engine=feature_engine,
+            polymarket_client=polymarket_client,
+            external_ingestor=hyperliquid_ingestor,
+            persistence=persistence,
+        ),
         replay=ReplayService(state),
         paper_trader=PaperTraderService(
             settings=settings,
@@ -142,4 +169,13 @@ def build_polymarket_client(settings: Settings, root: Path) -> PolymarketClient:
     return RealPolymarketClient(
         api_base_url=settings.polymarket_api_base_url,
         ws_url=settings.polymarket_ws_url,
+    )
+
+
+def build_hyperliquid_recent_client(settings: Settings, root: Path):
+    if settings.use_mock_hyperliquid_recent:
+        return MockHyperliquidClient(seed_path=root / "data" / "seed" / "hyperliquid_recent.json")
+    return RealHyperliquidClient(
+        info_url=settings.hyperliquid_info_url,
+        trade_limit=settings.hyperliquid_recent_trade_limit,
     )

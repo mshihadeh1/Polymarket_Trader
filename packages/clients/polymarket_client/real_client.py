@@ -40,27 +40,50 @@ class RealPolymarketClient(PolymarketClient):
     def is_mock(self) -> bool:
         return False
 
-    async def discover_active_markets(self) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
+    async def discover_markets(
+        self,
+        *,
+        closed: bool | None = None,
+        active: bool | None = None,
+        limit: int | None = None,
+    ) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
         raw_markets: list[dict[str, Any]] = []
         normalized: list[PolymarketMarketMetadata] = []
         offset = 0
-        limit = 100
+        page_limit = min(limit or 100, 100)
         while True:
+            params = {"limit": page_limit, "offset": offset}
+            if closed is not None:
+                params["closed"] = str(closed).lower()
+            if active is not None:
+                params["active"] = str(active).lower()
             response = await self._http_client.get(
                 f"{self._api_base_url}/markets",
-                params={"closed": "false", "limit": limit, "offset": offset},
+                params=params,
             )
             response.raise_for_status()
             page = response.json()
             if not isinstance(page, list) or not page:
                 break
-            active_page = [item for item in page if item.get("active")]
-            raw_markets.extend(active_page)
-            normalized.extend(self._normalize_market_payload(item) for item in active_page)
-            if len(page) < limit:
+            filtered_page = [
+                item
+                for item in page
+                if (closed is None or bool(item.get("closed")) == closed)
+                and (active is None or bool(item.get("active")) == active)
+            ]
+            raw_markets.extend(filtered_page)
+            normalized.extend(self._normalize_market_payload(item) for item in filtered_page)
+            if limit is not None and len(raw_markets) >= limit:
+                raw_markets = raw_markets[:limit]
+                normalized = normalized[:limit]
                 break
-            offset += limit
+            if len(page) < page_limit:
+                break
+            offset += page_limit
         return raw_markets, normalized
+
+    async def discover_active_markets(self) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
+        return await self.discover_markets(closed=False, active=True)
 
     async def stream_market_events(
         self,
