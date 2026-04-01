@@ -33,10 +33,10 @@ class Settings(BaseSettings):
     use_mock_external_provider: bool = Field(default=True, alias="USE_MOCK_EXTERNAL_PROVIDER")
     binance_base_url: str = Field(default="https://api.binance.com", alias="BINANCE_BASE_URL")
     csv_btc_path: str = Field(default="data/datasets/BTCUSD-1m-104wks-data.csv", alias="CSV_BTC_PATH")
-    csv_eth_path: str = Field(default="data/datasets/eth_1m.csv", alias="CSV_ETH_PATH")
+    csv_eth_path: str = Field(default="", alias="CSV_ETH_PATH")
     csv_sol_path: str = Field(default="data/datasets/SOLUSD-1m-104wks-data.csv", alias="CSV_SOL_PATH")
     csv_provider_paths: str = Field(
-        default='{"BTC":"data/datasets/BTCUSD-1m-104wks-data.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/SOLUSD-1m-104wks-data.csv"}',
+        default='{"BTC":"data/datasets/BTCUSD-1m-104wks-data.csv","SOL":"data/datasets/SOLUSD-1m-104wks-data.csv"}',
         alias="CSV_PROVIDER_PATHS",
     )
     hyperliquid_info_url: str = Field(default="https://api.hyperliquid.xyz/info", alias="HYPERLIQUID_INFO_URL")
