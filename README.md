@@ -127,7 +127,7 @@ Use:
 ```bash
 EXTERNAL_HISTORICAL_PROVIDER=csv
 USE_MOCK_EXTERNAL_PROVIDER=false
-CSV_PROVIDER_PATHS={"BTC":"data/datasets/btc_1m.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/sol_1m.csv"}
+CSV_PROVIDER_PATHS={"BTC":"data/datasets/BTCUSD-1m-104wks-data.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/SOLUSD-1m-104wks-data.csv"}
 ```
 
 What it does today:
@@ -181,9 +181,13 @@ Example config:
 ```bash
 EXTERNAL_HISTORICAL_PROVIDER=csv
 USE_MOCK_EXTERNAL_PROVIDER=false
-CSV_PROVIDER_PATHS={"BTC":"data/datasets/btc_1m.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/sol_1m.csv"}
+CSV_PROVIDER_PATHS={"BTC":"data/datasets/BTCUSD-1m-104wks-data.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/SOLUSD-1m-104wks-data.csv"}
 EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}
 ```
+
+The repo now includes these local 1-minute datasets:
+- `data/datasets/BTCUSD-1m-104wks-data.csv`
+- `data/datasets/SOLUSD-1m-104wks-data.csv`
 
 Downstream modules remain provider-agnostic:
 - feature engine reads normalized bars
