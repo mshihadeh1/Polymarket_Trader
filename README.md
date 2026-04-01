@@ -60,6 +60,8 @@ PowerShell:
 ./scripts/check-health.ps1
 ```
 
+6. Keep `PAPER_TRADING_LOOP_ENABLED=false` for the current observation and CSV backtest runbooks. The paper loop remains out of scope for this validation pass.
+
 ## First 10 Minutes After Clone
 
 1. Copy `.env.example` to `.env`.
@@ -105,6 +107,19 @@ USE_MOCK_POLYMARKET_CLIENT=false
 POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
 POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
 USE_MOCK_EXTERNAL_PROVIDER=true
+PAPER_TRADING_LOOP_ENABLED=false
+```
+
+Or run the helper:
+
+```bash
+./scripts/run-real-observation.sh
+```
+
+PowerShell:
+
+```powershell
+./scripts/run-real-observation.ps1
 ```
 
 What is real:
@@ -128,9 +143,22 @@ Use:
 EXTERNAL_HISTORICAL_PROVIDER=csv
 USE_MOCK_EXTERNAL_PROVIDER=false
 CSV_BTC_PATH=data/datasets/BTCUSD-1m-104wks-data.csv
-CSV_ETH_PATH=data/datasets/eth_1m.csv
+CSV_ETH_PATH=
 CSV_SOL_PATH=data/datasets/SOLUSD-1m-104wks-data.csv
 USE_MOCK_HYPERLIQUID_RECENT=false
+PAPER_TRADING_LOOP_ENABLED=false
+```
+
+Run one baseline batch with the helper:
+
+```bash
+./scripts/run-csv-backtest.sh
+```
+
+PowerShell:
+
+```powershell
+./scripts/run-csv-backtest.ps1
 ```
 
 What it does today:
@@ -186,10 +214,12 @@ Example config:
 EXTERNAL_HISTORICAL_PROVIDER=csv
 USE_MOCK_EXTERNAL_PROVIDER=false
 CSV_BTC_PATH=data/datasets/BTCUSD-1m-104wks-data.csv
-CSV_ETH_PATH=data/datasets/eth_1m.csv
+CSV_ETH_PATH=
 CSV_SOL_PATH=data/datasets/SOLUSD-1m-104wks-data.csv
 EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}
 ```
+
+If you have a local ETH file, set `CSV_ETH_PATH` to that file before starting the stack.
 
 The repo now includes these local 1-minute datasets:
 - `data/datasets/BTCUSD-1m-104wks-data.csv`
@@ -292,9 +322,13 @@ Helper scripts:
 - [scripts/dev-up.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-up.sh)
 - [scripts/dev-down.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-down.sh)
 - [scripts/check-health.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/check-health.sh)
+- [scripts/run-csv-backtest.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/run-csv-backtest.sh)
+- [scripts/run-real-observation.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/run-real-observation.sh)
 - [scripts/dev-up.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-up.ps1)
 - [scripts/dev-down.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-down.ps1)
 - [scripts/check-health.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/check-health.ps1)
+- [scripts/run-csv-backtest.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/run-csv-backtest.ps1)
+- [scripts/run-real-observation.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/run-real-observation.ps1)
 
 ## Health And Verification
 
@@ -312,6 +346,7 @@ curl http://localhost:8000/api/v1/system/health
 curl http://localhost:8000/api/v1/markets
 curl http://localhost:8000/api/v1/external-provider
 curl "http://localhost:8000/api/v1/evaluations/closed-markets?asset=BTC&timeframe=crypto_5m&limit=10"
+curl -X POST "http://localhost:8000/api/v1/evaluations/closed-markets/run?asset=BTC&timeframe=crypto_5m&limit=10&include_hyperliquid_enrichment=false"
 ```
 
 Expected mock-mode signs:
@@ -327,6 +362,22 @@ Expected real-observation signs:
   - `Polymarket discovery returned ... selected short-horizon markets`
   - `Polymarket websocket connected for live observation`
 
+Expected CSV-startup signs:
+- API logs include messages like:
+  - `CSV dataset validation symbol=BTC rows=... first=... last=... duplicates=... issues=[]`
+  - `CSV dataset validation symbol=SOL rows=... first=... last=... duplicates=... issues=[]`
+- `/api/v1/external-provider` returns `"provider_name": "csv"`
+- `/api/v1/external-provider` includes `dataset_validation` entries with:
+  - `row_count`
+  - `first_timestamp`
+  - `last_timestamp`
+  - `duplicate_count`
+  - `schema_issues`
+
+Expected backtest-batch signs:
+- `POST /api/v1/evaluations/closed-markets/run?...include_hyperliquid_enrichment=false` returns a batch report
+- [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) shows eligible markets and batch results
+
 ## Verification Checklist
 
 - Repo cloned successfully.
@@ -336,15 +387,18 @@ Expected real-observation signs:
 - [http://localhost:8000/docs](http://localhost:8000/docs) loads.
 - [http://localhost:8000/healthz](http://localhost:8000/healthz) returns `{"status":"ok"}`.
 - [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health) returns JSON with market and provider details.
+- [http://localhost:8000/api/v1/external-provider](http://localhost:8000/api/v1/external-provider) returns dataset validation details when CSV mode is active.
 - Dashboard clearly shows:
   - mock vs real Polymarket mode
   - current external provider
   - connection status
   - last event time
+- Dashboard BTC quick-launch cards open live BTC 5m or BTC 15m detail pages in real observation mode.
 - Backtests page shows:
   - recent closed eligible markets
   - bars-only versus enriched comparison
   - enrichment coverage notes
+- CSV baseline batch returns a report from `POST /api/v1/evaluations/closed-markets/run?...include_hyperliquid_enrichment=false`.
 - If using CSV backtests, the configured file paths exist and the files have the required columns.
 - If using real observation mode, the dashboard shows live venue badges and a recent event timestamp.
 
@@ -424,12 +478,18 @@ curl "http://localhost:8000/api/v1/evaluations/closed-markets?asset=BTC&timefram
 curl -X POST "http://localhost:8000/api/v1/evaluations/compare?asset=BTC&timeframe=crypto_5m&limit=10"
 ```
 
+For a baseline-only batch using the current bar-based evaluator:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/evaluations/closed-markets/run?asset=BTC&timeframe=crypto_5m&limit=10&include_hyperliquid_enrichment=false"
+```
+
 7. Open [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) to inspect:
 - eligible closed markets
 - bars-only vs bars-plus-Hyperliquid comparison
 - coverage and missing-data notes
 
-8. For open markets, switch to real observation mode and use the same feature stack through market detail and paper-trading pages.
+8. For open markets, switch to real observation mode with `./scripts/run-real-observation.sh` or `./scripts/run-real-observation.ps1` and use the same feature stack through the dashboard and market detail pages.
 
 ## API Surface
 
