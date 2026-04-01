@@ -1,17 +1,23 @@
 import Link from "next/link";
 
-import { fetchMarkets, fetchPaperBlotter, fetchSystemHealth } from "../lib/api";
+import { fetchMarkets, fetchPaperBlotter, fetchSystemHealth, runClosedMarketComparison } from "../lib/api";
+import { buildEdgeSlice } from "../lib/edge";
 import { formatLosAngelesDateTime, losAngelesTimeZoneLabel } from "../lib/time";
 
 function formatTime(value?: string): string {
   return formatLosAngelesDateTime(value);
 }
 
+function dashboardHitRateLabel(hitRate: number, sampleSize: number): string {
+  return sampleSize ? `${(hitRate * 100).toFixed(1)}%` : "n/a";
+}
+
 export async function MarketDashboard() {
-  const [markets, blotter, health] = await Promise.all([
+  const [markets, blotter, health, btcComparison] = await Promise.all([
     fetchMarkets(),
     fetchPaperBlotter(),
     fetchSystemHealth(),
+    runClosedMarketComparison("BTC", undefined, 24),
   ]);
   const liveMarkets = markets.filter((market) => market.status === "active");
   const crypto5m = markets.filter((market) => market.market_type === "crypto_5m").length;
@@ -19,6 +25,8 @@ export async function MarketDashboard() {
   const btc5mMarket = markets.find((market) => market.underlying === "BTC" && market.market_type === "crypto_5m");
   const btc15mMarket = markets.find((market) => market.underlying === "BTC" && market.market_type === "crypto_15m");
   const observation = health.polymarket_observation;
+  const btc5mEdge = buildEdgeSlice(btcComparison.bars_plus_hyperliquid, "crypto_5m");
+  const btc15mEdge = buildEdgeSlice(btcComparison.bars_plus_hyperliquid, "crypto_15m");
 
   return (
     <div className="page-grid page-shell">
@@ -121,6 +129,36 @@ export async function MarketDashboard() {
               {observation.last_error ?? `last connect ${formatTime(observation.last_connect_at)}`}
             </span>
           </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>BTC edge board</h2>
+          <p className="muted">Closed-market evidence for whether the model has an edge on the 5m and 15m BTC up/down contracts.</p>
+        </div>
+        <div className="stack">
+          <Link className="list-card" href="/backtests?asset=BTC&timeframe=crypto_5m&limit=24">
+            <div className="badge-stack">
+              <span className={`badge ${btc5mEdge.tone === "positive" ? "badge-positive" : btc5mEdge.tone === "negative" ? "badge-negative" : btc5mEdge.tone === "warning" ? "badge-historical" : "badge-pending"}`}>
+                {btc5mEdge.verdict}
+              </span>
+              <span className="badge badge-type">BTC 5m</span>
+            </div>
+            <strong>{dashboardHitRateLabel(btc5mEdge.hitRate, btc5mEdge.sampleSize)} hit rate over {btc5mEdge.sampleSize} closed markets</strong>
+            <span className="muted">{btc5mEdge.summary}</span>
+          </Link>
+          <Link className="list-card" href="/backtests?asset=BTC&timeframe=crypto_15m&limit=24">
+            <div className="badge-stack">
+              <span className={`badge ${btc15mEdge.tone === "positive" ? "badge-positive" : btc15mEdge.tone === "negative" ? "badge-negative" : btc15mEdge.tone === "warning" ? "badge-historical" : "badge-pending"}`}>
+                {btc15mEdge.verdict}
+              </span>
+              <span className="badge badge-type">BTC 15m</span>
+            </div>
+            <strong>{dashboardHitRateLabel(btc15mEdge.hitRate, btc15mEdge.sampleSize)} hit rate over {btc15mEdge.sampleSize} closed markets</strong>
+            <span className="muted">{btc15mEdge.summary}</span>
+          </Link>
+          <Link className="terminal-link" href="/backtests?asset=BTC&timeframe=all&limit=24">Open full edge workspace</Link>
         </div>
       </section>
 
