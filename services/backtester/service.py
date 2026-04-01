@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 import csv
 import json
 from datetime import datetime, timedelta, timezone
@@ -46,6 +47,7 @@ class BacktesterService:
         self._persistence = persistence
         self._strategy_registry = strategy_registry or build_strategy_registry()
         self._synthetic_bar_cache: dict[str, list[dict[str, float | datetime]]] = {}
+        self._synthetic_bar_timestamps: dict[str, list[datetime]] = {}
 
     def list_strategies(self):
         return [strategy.descriptor for strategy in self._strategy_registry.values()]
@@ -306,6 +308,7 @@ class BacktesterService:
                 )
         rows.sort(key=lambda item: item["ts"])
         self._synthetic_bar_cache[normalized] = rows
+        self._synthetic_bar_timestamps[normalized] = [item["ts"] for item in rows if isinstance(item["ts"], datetime)]
         return rows
 
     def build_live_feature_view(self, market_id: str) -> dict:
@@ -411,6 +414,13 @@ class BacktesterService:
 
     def _assemble_synthetic_window(self, symbol: str, *, start: datetime, end: datetime) -> dict:
         rows = self._load_symbol_bars(symbol)
+        timestamps = self._synthetic_bar_timestamps.get(symbol.upper(), [])
+        if timestamps:
+            start_index = bisect_left(timestamps, start)
+            end_index = bisect_right(timestamps, end)
+            window_rows = rows[start_index:end_index]
+        else:
+            window_rows = [row for row in rows if start <= row["ts"] <= end]
         bars = [
             OHLCVBar(
                 ts=row["ts"],
@@ -423,8 +433,7 @@ class BacktesterService:
                 volume=0.0,
                 interval="1m",
             )
-            for row in rows
-            if start <= row["ts"] <= end
+            for row in window_rows
         ]
         return {
             "bars": bars,
