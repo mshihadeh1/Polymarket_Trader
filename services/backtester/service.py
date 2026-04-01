@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from packages.config import Settings
@@ -12,12 +15,16 @@ from packages.core_types.schemas import (
     ClosedMarketBatchReport,
     ClosedMarketEvaluationRecord,
     EquityPoint,
+    FeatureAvailability,
     MarketDetail,
+    OHLCVBar,
+    PolymarketMarketMetadata,
 )
 from services.backtester.strategies import BaseStrategy, StrategyContext, build_strategy_registry
 from services.feature_engine.service import FeatureEngineService
 from services.market_catalog.classifier import classify_polymarket_market
 from services.state import InMemoryState
+from packages.utils.time import parse_dt
 
 
 class BacktesterService:
@@ -38,6 +45,7 @@ class BacktesterService:
         self._external_ingestor = external_ingestor
         self._persistence = persistence
         self._strategy_registry = strategy_registry or build_strategy_registry()
+        self._synthetic_bar_cache: dict[str, list[dict[str, float | datetime]]] = {}
 
     def list_strategies(self):
         return [strategy.descriptor for strategy in self._strategy_registry.values()]
@@ -85,16 +93,9 @@ class BacktesterService:
         timeframe: str | None = None,
         limit: int = 50,
     ) -> list[dict]:
-        raw_markets, normalized = await self._polymarket_client.discover_markets(closed=True, limit=max(limit * 3, 100))
+        closed_markets = await self._discover_short_horizon_closed_markets(asset=asset, timeframe=timeframe, limit=limit)
         eligible = []
-        for raw_market, metadata in zip(raw_markets, normalized, strict=False):
-            market_type, underlying = classify_polymarket_market(metadata)
-            if market_type not in {"crypto_5m", "crypto_15m"}:
-                continue
-            if asset is not None and (underlying or "").upper() != asset.upper():
-                continue
-            if timeframe is not None and market_type != timeframe:
-                continue
+        for raw_market, metadata, market_type, underlying in closed_markets:
             if metadata.start_date is None or metadata.end_date is None:
                 continue
             eligible.append(
@@ -150,21 +151,14 @@ class BacktesterService:
         include_hyperliquid_enrichment: bool,
     ) -> ClosedMarketBatchReport:
         strategy = self._strategy_registry[strategy_name]
-        raw_markets, normalized = await self._polymarket_client.discover_markets(closed=True, limit=max(limit * 3, 100))
+        closed_markets = await self._discover_short_horizon_closed_markets(asset=asset, timeframe=timeframe, limit=limit)
         records: list[ClosedMarketEvaluationRecord] = []
         coverage = {
             "bars_only": 0,
             "bars_plus_trades": 0,
             "bars_plus_trades_plus_orderbook": 0,
         }
-        for raw_market, metadata in zip(raw_markets, normalized, strict=False):
-            market_type, underlying = classify_polymarket_market(metadata)
-            if market_type not in {"crypto_5m", "crypto_15m"}:
-                continue
-            if asset is not None and (underlying or "").upper() != asset.upper():
-                continue
-            if timeframe is not None and market_type != timeframe:
-                continue
+        for raw_market, metadata, market_type, underlying in closed_markets:
             if metadata.start_date is None or metadata.end_date is None or underlying is None:
                 continue
             record = self._evaluate_closed_market(
@@ -213,6 +207,107 @@ class BacktesterService:
         self._state.closed_market_batch_reports.insert(0, report)
         return report
 
+    async def _discover_short_horizon_closed_markets(
+        self,
+        *,
+        asset: str | None,
+        timeframe: str | None,
+        limit: int,
+    ) -> list[tuple[dict, PolymarketMarketMetadata, str, str | None]]:
+        raw_markets, normalized = await self._polymarket_client.discover_markets(closed=True, limit=max(limit * 3, 100))
+        discovered: list[tuple[dict, PolymarketMarketMetadata, str, str | None]] = []
+        for raw_market, metadata in zip(raw_markets, normalized, strict=False):
+            market_type, underlying = classify_polymarket_market(metadata)
+            if market_type not in {"crypto_5m", "crypto_15m"}:
+                continue
+            if asset is not None and (underlying or "").upper() != asset.upper():
+                continue
+            if timeframe is not None and market_type != timeframe:
+                continue
+            discovered.append((raw_market, metadata, market_type, underlying))
+        if discovered:
+            discovered.sort(key=lambda item: item[1].end_date or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+            return discovered[:limit]
+        synthetic = self._build_synthetic_closed_markets(asset=asset, timeframe=timeframe, limit=limit)
+        return synthetic[:limit]
+
+    def _build_synthetic_closed_markets(
+        self,
+        *,
+        asset: str | None,
+        timeframe: str | None,
+        limit: int,
+    ) -> list[tuple[dict, PolymarketMarketMetadata, str, str | None]]:
+        assets = [asset.upper()] if asset else ["BTC", "ETH", "SOL"]
+        timeframe_minutes = []
+        if timeframe in {None, "crypto_5m"}:
+            timeframe_minutes.append(("crypto_5m", 5))
+        if timeframe in {None, "crypto_15m"}:
+            timeframe_minutes.append(("crypto_15m", 15))
+
+        synthetic: list[tuple[dict, PolymarketMarketMetadata, str, str | None]] = []
+        for symbol in assets:
+            bars = self._load_symbol_bars(symbol)
+            if not bars:
+                continue
+            for market_type, minutes in timeframe_minutes:
+                synthetic.extend(
+                    _build_synthetic_markets_from_bars(
+                        bars=bars,
+                        asset=symbol,
+                        market_type=market_type,
+                        window_minutes=minutes,
+                        limit=limit,
+                    )
+                )
+        synthetic.sort(key=lambda item: item[1].end_date or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        return synthetic[:limit]
+
+    def _load_symbol_bars(self, symbol: str) -> list[dict[str, float | datetime]]:
+        normalized = symbol.upper()
+        if normalized in self._synthetic_bar_cache:
+            return self._synthetic_bar_cache[normalized]
+        path_map = {
+            key.upper(): value
+            for key, value in json.loads(self._settings.csv_provider_paths).items()
+            if isinstance(value, str) and value.strip()
+        }
+        explicit_paths = {
+            "BTC": self._settings.csv_btc_path,
+            "ETH": self._settings.csv_eth_path,
+            "SOL": self._settings.csv_sol_path,
+        }
+        for key, value in explicit_paths.items():
+            if isinstance(value, str) and value.strip():
+                path_map[key] = value
+
+        path_value = path_map.get(normalized)
+        if not path_value:
+            return []
+        path = Path(path_value)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[2] / path
+        if not path.exists():
+            return []
+
+        rows: list[dict[str, float | datetime]] = []
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                parsed_ts = parse_dt(str(row.get("datetime") or row.get("timestamp") or row.get("ts") or row.get("date") or "").replace(" ", "T"))
+                if parsed_ts is None:
+                    continue
+                rows.append(
+                    {
+                        "ts": parsed_ts,
+                        "open": float(row["open"]),
+                        "close": float(row["close"]),
+                    }
+                )
+        rows.sort(key=lambda item: item["ts"])
+        self._synthetic_bar_cache[normalized] = rows
+        return rows
+
     def build_live_feature_view(self, market_id: str) -> dict:
         market = self._state.market_details.get(market_id)
         if market is None:
@@ -242,13 +337,16 @@ class BacktesterService:
         market_detail = _build_market_detail(raw_market, metadata, asset=asset, timeframe=timeframe, strike_price=strike_price)
         window_start = metadata.start_date - timedelta(minutes=max(self._feature_engine._windows, default=15))
         window_end = metadata.end_date
-        assembled = self._external_ingestor.assemble_window(
-            asset,
-            start=window_start,
-            end=window_end,
-            include_recent_enrichment=include_hyperliquid_enrichment,
-            include_current_orderbook=False,
-        )
+        if metadata.resolution_source == "synthetic_from_csv_close":
+            assembled = self._assemble_synthetic_window(asset, start=window_start, end=window_end)
+        else:
+            assembled = self._external_ingestor.assemble_window(
+                asset,
+                start=window_start,
+                end=window_end,
+                include_recent_enrichment=include_hyperliquid_enrichment,
+                include_current_orderbook=False,
+            )
         bars = assembled["bars"]
         if not bars:
             return None
@@ -310,6 +408,37 @@ class BacktesterService:
             correctness=correctness,
             notes=notes,
         )
+
+    def _assemble_synthetic_window(self, symbol: str, *, start: datetime, end: datetime) -> dict:
+        rows = self._load_symbol_bars(symbol)
+        bars = [
+            OHLCVBar(
+                ts=row["ts"],
+                symbol=symbol,
+                provider="csv_synthetic",
+                open=float(row["open"]),
+                high=max(float(row["open"]), float(row["close"])),
+                low=min(float(row["open"]), float(row["close"])),
+                close=float(row["close"]),
+                volume=0.0,
+                interval="1m",
+            )
+            for row in rows
+            if start <= row["ts"] <= end
+        ]
+        return {
+            "bars": bars,
+            "trades": [],
+            "orderbooks": [],
+            "raw_payloads": {"bars": []},
+            "availability": FeatureAvailability(
+                bars_available=bool(bars),
+                trades_available=False,
+                orderbook_available=False,
+                enriched_with_hyperliquid=False,
+                notes=["Synthetic evaluation window sourced from local CSV history."],
+            ),
+        }
 
     def _run_sequential_market_backtest(
         self,
@@ -566,3 +695,68 @@ def _is_uuid(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _build_synthetic_markets_from_bars(
+    *,
+    bars: list[dict[str, float | datetime]],
+    asset: str,
+    market_type: str,
+    window_minutes: int,
+    limit: int,
+) -> list[tuple[dict, PolymarketMarketMetadata, str, str | None]]:
+    synthetic: list[tuple[dict, PolymarketMarketMetadata, str, str | None]] = []
+    usable = len(bars) - (len(bars) % window_minutes)
+    if usable <= 0:
+        return synthetic
+
+    windows = bars[:usable]
+    for index in range(0, usable, window_minutes):
+        chunk = windows[index:index + window_minutes]
+        if len(chunk) != window_minutes:
+            continue
+        open_ts = chunk[0]["ts"]
+        close_ts = chunk[-1]["ts"]
+        if not isinstance(open_ts, datetime) or not isinstance(close_ts, datetime):
+            continue
+        open_price = float(chunk[0]["open"])
+        close_price = float(chunk[-1]["close"])
+        close_label = (close_ts + timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M UTC")
+        duration_label = "5m" if window_minutes == 5 else "15m"
+        slug = f"synthetic-{asset.lower()}-{duration_label}-close-above-{open_price:.2f}-{int(close_ts.timestamp())}"
+        question = f"Will {asset} {duration_label} candle close above {open_price:.2f} at {close_label}?"
+        raw_market = {
+            "id": f"synthetic:{asset}:{market_type}:{int(close_ts.timestamp())}",
+            "slug": slug,
+            "question": question,
+            "price_to_beat": open_price,
+            "winner": "yes" if close_price > open_price else "no",
+            "status": "closed",
+            "resolutionSource": "synthetic_from_csv_close",
+        }
+        metadata = PolymarketMarketMetadata(
+            market_id=str(raw_market["id"]),
+            condition_id=str(raw_market["id"]),
+            slug=slug,
+            question=question,
+            category="crypto",
+            active=False,
+            closed=True,
+            accepting_orders=False,
+            enable_order_book=False,
+            start_date=open_ts,
+            end_date=close_ts,
+            resolution_source="synthetic_from_csv_close",
+            description=f"Synthetic short-horizon {asset} window generated from local 1m dataset.",
+            outcomes=["YES", "NO"],
+            outcome_prices=[],
+            token_ids=[],
+            best_bid=None,
+            best_ask=None,
+            last_trade_price=None,
+            raw_tags=[market_type, asset.lower(), "synthetic"],
+        )
+        synthetic.append((raw_market, metadata, market_type, asset))
+
+    synthetic.sort(key=lambda item: item[1].end_date or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return synthetic[:limit]
