@@ -1,5 +1,7 @@
 from packages.core_types.schemas import (
     BacktestReport,
+    BacktestTrade,
+    EquityPoint,
     ExternalOrderBookSnapshot,
     ExternalTrade,
     FeatureSnapshot,
@@ -9,6 +11,8 @@ from packages.core_types.schemas import (
     OHLCVBar,
     OrderBookSnapshot,
     PaperTradeDecision,
+    PaperSignalSnapshot,
+    PaperPosition,
     PaperTradingStatus,
     PolymarketMarketMetadata,
     PolymarketObservationStatus,
@@ -28,6 +32,8 @@ from packages.core_types.schemas import (
 
 __all__ = [
     "BacktestReport",
+    "BacktestTrade",
+    "EquityPoint",
     "ExternalOrderBookSnapshot",
     "ExternalTrade",
     "FeatureSnapshot",
@@ -37,6 +43,8 @@ __all__ = [
     "OHLCVBar",
     "OrderBookSnapshot",
     "PaperTradeDecision",
+    "PaperSignalSnapshot",
+    "PaperPosition",
     "PaperTradingStatus",
     "PolymarketMarketMetadata",
     "PolymarketObservationStatus",

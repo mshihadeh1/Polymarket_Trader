@@ -18,6 +18,7 @@ export async function BacktestResults() {
     ? [sampleRun, ...reports.filter((report) => report.run_id !== sampleRun.run_id)]
     : reports;
   const totalTrades = allReports.reduce((sum, report) => sum + report.trade_count, 0);
+  const latestReport = allReports[0];
 
   return (
     <div className="page-grid page-shell">
@@ -54,6 +55,7 @@ export async function BacktestResults() {
             <thead>
               <tr>
                 <th>Run</th>
+                <th>Bars</th>
                 <th>Trades</th>
                 <th>Net PnL</th>
                 <th>Hit rate</th>
@@ -72,6 +74,7 @@ export async function BacktestResults() {
                       </div>
                     </div>
                   </td>
+                  <td>{metric(report, "bar_count")}</td>
                   <td>{report.trade_count}</td>
                   <td>{metric(report, "net_pnl")}</td>
                   <td>{metric(report, "hit_rate")}</td>
@@ -85,10 +88,29 @@ export async function BacktestResults() {
 
       <section className="panel">
         <div className="section-head">
-          <h2>Strategy menu</h2>
-          <p className="muted">Initial strategy registry exposed as a compact research menu.</p>
+          <h2>Latest replay</h2>
+          <p className="muted">Most recent sequential bar replay and its latest fills.</p>
         </div>
         <div className="stack">
+          {latestReport ? (
+            <>
+              <div className="list-card">
+                <strong>{latestReport.strategy_name}</strong>
+                <span className="muted">{latestReport.notes[0]}</span>
+                <span className="table-meta">equity points {latestReport.equity_curve?.length ?? 0}</span>
+              </div>
+              {(latestReport.trades ?? []).slice(-4).reverse().map((trade) => (
+                <div className="list-card" key={`${trade.ts}-${trade.action}`}>
+                  <div className="badge-stack">
+                    <span className={`badge ${trade.side === "buy_yes" ? "badge-buy" : "badge-sell"}`}>{trade.side}</span>
+                    <span className="badge badge-provider">{trade.action}</span>
+                  </div>
+                  <strong>{trade.price.toFixed(3)} x {trade.size.toFixed(0)}</strong>
+                  <span className="muted">net pnl {trade.net_pnl.toFixed(2)} | cost {trade.cost.toFixed(2)}</span>
+                </div>
+              ))}
+            </>
+          ) : null}
           {strategies.map((strategy) => (
             <div className="list-card" key={strategy.name}>
               <div className="badge-stack">

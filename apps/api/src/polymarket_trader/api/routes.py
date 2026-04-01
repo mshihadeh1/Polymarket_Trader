@@ -120,6 +120,20 @@ def build_router(container: Container) -> APIRouter:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @router.post("/paper-trading/cycle")
+    def run_paper_cycle():
+        return container.paper_trader.run_cycle()
+
+    @router.post("/paper-trading/start")
+    async def start_paper_loop():
+        await container.paper_trader.start_loop()
+        return container.paper_trader.status()
+
+    @router.post("/paper-trading/stop")
+    async def stop_paper_loop():
+        await container.paper_trader.stop_loop()
+        return container.paper_trader.status()
+
     @router.get("/risk/settings")
     def risk_settings():
         return container.paper_trader.risk_settings()

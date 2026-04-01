@@ -70,13 +70,65 @@ export type BacktestReport = {
   metrics: { label: string; value: number }[];
   notes: string[];
   decisions: { decision: string; confidence: number; reason: string; signal_value: number }[];
+  trades?: {
+    ts: string;
+    action: string;
+    side: string;
+    price: number;
+    size: number;
+    gross_pnl: number;
+    net_pnl: number;
+    cost: number;
+  }[];
+  equity_curve?: {
+    ts: string;
+    equity: number;
+    realized_pnl: number;
+    unrealized_pnl: number;
+    position: number;
+  }[];
 };
 
 export type PaperStatus = {
   strategy_name: string;
   dry_run_only: boolean;
   active_market_ids: string[];
+  selected_market_ids: string[];
   open_positions: Record<string, number>;
+  position_details: {
+    market_id: string;
+    side: "buy_yes" | "buy_no";
+    size: number;
+    avg_price: number;
+    mark_price: number;
+    unrealized_pnl: number;
+    opened_at: string;
+  }[];
+  latest_signals: {
+    market_id: string;
+    ts: string;
+    signal_value: number;
+    decision: string;
+    confidence: number;
+    fair_value_gap?: number;
+    midpoint?: number;
+  }[];
+  last_decision?: {
+    ts: string;
+    market_id: string;
+    action: string;
+    side: string;
+    price: number;
+    size: number;
+    status: string;
+    reason?: string;
+    signal_value?: number;
+    confidence?: number;
+  } | null;
+  loop_running: boolean;
+  last_update_at?: string;
+  cycle_count: number;
+  loop_error?: string | null;
   unrealized_pnl: number;
   realized_pnl: number;
 };

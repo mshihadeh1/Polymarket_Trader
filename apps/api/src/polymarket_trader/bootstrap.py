@@ -43,6 +43,7 @@ class Container:
         if self.state.markets and not force_reload:
             return len(self.state.markets)
         if force_reload:
+            self.paper_trader.reset_state()
             self.state.markets.clear()
             self.state.market_details.clear()
             self.state.polymarket_orderbooks.clear()
@@ -82,8 +83,10 @@ class Container:
 
     async def start_background_tasks(self) -> None:
         await self.polymarket_ingestor.start_live_ingestion()
+        await self.paper_trader.start_loop()
 
     async def stop_background_tasks(self) -> None:
+        await self.paper_trader.stop_loop()
         await self.polymarket_ingestor.stop_live_ingestion()
 
     def bootstrap_seed_data_sync(self, force_reload: bool = False) -> int:
@@ -113,7 +116,7 @@ def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Cont
         hyperliquid_ingestor=HyperliquidIngestorService(state, provider=external_provider),
         market_window=market_window,
         feature_engine=feature_engine,
-        backtester=BacktesterService(state, feature_engine=feature_engine, persistence=persistence),
+        backtester=BacktesterService(settings=settings, state=state, feature_engine=feature_engine, persistence=persistence),
         replay=ReplayService(state),
         paper_trader=PaperTraderService(
             settings=settings,

@@ -95,10 +95,34 @@ The external historical market data path now uses a provider interface in [packa
 
 Current provider support:
 - `binance`: implemented for historical 1-minute OHLCV, with trades and snapshots available as provider methods
+- `csv`: implemented for local 1-minute OHLCV datasets
 - `tardis`: placeholder scaffold
 - `parquet`: placeholder scaffold
 
 The application stores both raw provider payloads and normalized records in the in-memory runtime state. Downstream modules consume only normalized internal models.
+
+### Local historical datasets
+
+Use the CSV provider when you want to backtest from your own 1-minute files instead of Binance.
+
+Config:
+
+```bash
+EXTERNAL_HISTORICAL_PROVIDER=csv
+USE_MOCK_EXTERNAL_PROVIDER=false
+CSV_PROVIDER_PATHS={"BTC":"data/datasets/btc_1m.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/sol_1m.csv"}
+EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}
+```
+
+Expected CSV columns:
+- `ts` or `timestamp`
+- `open`
+- `high`
+- `low`
+- `close`
+- `volume`
+
+Each downstream service continues to consume normalized `OHLCVBar` records, so switching between Binance and local CSV data does not require strategy or replay rewrites.
 
 ## Real Polymarket Observation Mode
 
@@ -180,6 +204,78 @@ curl -X POST http://localhost:8000/api/v1/ingestion/bootstrap
 
 This runbook is meant for venue observation and data inspection only. It does not imply live trading readiness.
 
+## Historical backtest runbook
+
+Use this flow when you want to replay your own 1-minute BTC, ETH, or SOL datasets bar by bar.
+
+1. Put your CSV files in a local folder such as `data/datasets/`.
+2. Configure the provider:
+
+```bash
+EXTERNAL_HISTORICAL_PROVIDER=csv
+USE_MOCK_EXTERNAL_PROVIDER=false
+CSV_PROVIDER_PATHS={"BTC":"data/datasets/btc_1m.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/sol_1m.csv"}
+```
+
+3. Start the API:
+
+```bash
+cd apps/api
+uvicorn polymarket_trader.main:app --reload --port 8000
+```
+
+4. Run a backtest against a loaded market:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/backtests/<market_id>?strategy_name=combined_cvd_gap"
+```
+
+5. Inspect the returned report:
+- `trades`
+- `equity_curve`
+- `net_pnl`
+- `drawdown`
+- `expectancy_per_trade`
+
+The sequential backtester now steps bar by bar over normalized 1-minute external bars, recomputes features at each step, and maintains simple position state with explicit fee and slippage assumptions.
+
+## Live paper mode runbook
+
+Use this flow when you want a dry-run loop running for a few hours alongside real Polymarket observation.
+
+1. Enable real Polymarket mode and the paper loop:
+
+```bash
+USE_MOCK_POLYMARKET=false
+USE_MOCK_POLYMARKET_CLIENT=false
+PAPER_TRADING_LOOP_ENABLED=true
+PAPER_TRADING_LOOP_SECONDS=30
+PAPER_TRADING_UNDERLYINGS=BTC
+PAPER_TRADING_MARKET_TYPES=crypto_5m,crypto_15m
+PAPER_TRADING_STRATEGY=combined_cvd_gap
+LIVE_EXECUTION_ENABLED=false
+```
+
+2. Start the API and web app.
+3. Open `/paper-trading`.
+4. Watch:
+- selected markets
+- latest signal
+- last decision
+- open positions
+- realized and unrealized PnL
+- loop health and last update time
+
+Helpful control endpoints:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/paper-trading/start
+curl -X POST http://localhost:8000/api/v1/paper-trading/stop
+curl -X POST http://localhost:8000/api/v1/paper-trading/cycle
+```
+
+This remains dry-run only. No live execution path is enabled by these settings.
+
 Optional local persistence for feature snapshots, backtest reports, and paper decisions can be enabled with:
 
 ```bash
@@ -206,6 +302,9 @@ That persistence layer is a local development helper, not a claim that the full 
 - `GET /api/v1/paper-trading/blotter`
 - `GET /api/v1/paper-trading/status`
 - `POST /api/v1/paper-trading/run/{market_id}`
+- `POST /api/v1/paper-trading/cycle`
+- `POST /api/v1/paper-trading/start`
+- `POST /api/v1/paper-trading/stop`
 - `GET /api/v1/risk/settings`
 - `GET /api/v1/execution/status`
 - `GET /api/v1/system/health`
@@ -227,7 +326,7 @@ python -m pytest apps/api/tests tests
 ## Notes
 
 - Hyperliquid remains mock-first in the current app bootstrap.
-- Polymarket is no longer code-only mock-first: real discovery works behind config, but the live websocket ingestion path still needs hardening before it can be called end-to-end working.
+- Polymarket observation mode is usable for multi-hour dry-run monitoring, but this still does not claim live trading readiness.
 - Live order routing is not implemented and all execution paths remain dry-run only.
 - Weather and other market types are reflected in the schema and interfaces, but their specialized models and rule parsing land in later phases.
-- The current backtester is a Phase 1 scaffold that exposes result shapes and feature hooks without claiming full queue-position realism yet.
+- The backtester now replays 1-minute bars sequentially, but its execution model is still intentionally simple and explicit rather than microstructure-realistic.

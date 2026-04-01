@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from packages.clients.market_data_provider.binance import BinanceHistoricalProvider
+from packages.clients.market_data_provider.csv import CsvHistoricalProvider
 from packages.clients.market_data_provider.factory import build_provider_from_name
 from packages.config import Settings
 
@@ -60,3 +61,53 @@ def test_provider_factory_selects_binance() -> None:
         root=Path("C:/Users/Mahdi/Documents/Polymarket_Trader"),
     )
     assert provider.provider_name == "binance"
+
+
+def test_csv_provider_normalizes_local_ohlcv() -> None:
+    tmp_path = Path("C:/Users/Mahdi/Documents/Polymarket_Trader/data/test_tmp")
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    csv_path = tmp_path / "btc_1m.csv"
+    try:
+        csv_path.write_text(
+            "ts,open,high,low,close,volume\n"
+            "2026-03-31T11:58:00Z,84000,84020,83980,84010,12.5\n"
+            "2026-03-31T11:59:00Z,84010,84030,84000,84025,10.0\n",
+            encoding="utf-8",
+        )
+        provider = CsvHistoricalProvider(
+            path_map={"BTC": str(csv_path)},
+            symbol_map={"BTC": "BTCUSD_LOCAL"},
+            root=tmp_path,
+        )
+        raw_rows, bars = provider.get_ohlcv(
+            "BTC",
+            datetime(2026, 3, 31, 11, 58, 0, tzinfo=timezone.utc),
+            datetime(2026, 3, 31, 11, 59, 0, tzinfo=timezone.utc),
+            "1m",
+        )
+        assert len(raw_rows) == 2
+        assert bars[0].provider == "csv"
+        assert bars[0].symbol == "BTC"
+        assert bars[1].close == 84025.0
+    finally:
+        csv_path.unlink(missing_ok=True)
+
+
+def test_provider_factory_selects_csv() -> None:
+    tmp_path = Path("C:/Users/Mahdi/Documents/Polymarket_Trader/data/test_tmp")
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    csv_path = tmp_path / "btc_factory_1m.csv"
+    try:
+        csv_path.write_text(
+            "ts,open,high,low,close,volume\n2026-03-31T11:58:00Z,1,2,1,2,3\n",
+            encoding="utf-8",
+        )
+        settings = Settings(
+            EXTERNAL_HISTORICAL_PROVIDER="csv",
+            CSV_PROVIDER_PATHS=f'{{"BTC":"{csv_path.as_posix()}"}}',
+        )
+        provider = build_provider_from_name("csv", settings=settings, root=tmp_path)
+        assert provider.provider_name == "csv"
+        assert provider.capabilities().has_ohlcv is True
+    finally:
+        csv_path.unlink(missing_ok=True)

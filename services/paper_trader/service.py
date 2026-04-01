@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
 from packages.db import ResearchPersistence
 from packages.config import Settings
-from packages.core_types.schemas import PaperTradeDecision, PaperTradingStatus, RiskSettings
+from packages.core_types.schemas import PaperPosition, PaperSignalSnapshot, PaperTradeDecision, PaperTradingStatus, RiskSettings
 from services.backtester.strategies import StrategyContext, build_strategy_registry
 from services.feature_engine.service import FeatureEngineService
 from services.state import InMemoryState
+
+logger = logging.getLogger(__name__)
 
 
 class PaperTraderService:
@@ -24,69 +28,199 @@ class PaperTraderService:
         self._feature_engine = feature_engine
         self._persistence = persistence
         self._strategy_registry = build_strategy_registry()
-        self._strategy_name = "combined_cvd_gap"
-        self._blotter = [
-            PaperTradeDecision(
-                ts=datetime(2026, 3, 31, 11, 59, 40, tzinfo=timezone.utc),
-                market_id=UUID("6fd5b43f-b7c7-4f63-bf57-3a91e89e8c30"),
-                action="submit_order",
-                side="buy_yes",
-                price=0.54,
-                size=250,
-                status="simulated_fill",
-                reason="Seeded dry-run example decision",
-            )
-        ]
-        self._state.paper_decisions.extend(self._blotter)
+        self._strategy_name = settings.paper_trading_strategy
+        self._loop_task: asyncio.Task | None = None
+        self._last_decision: PaperTradeDecision | None = None
+        self._latest_signals: dict[str, PaperSignalSnapshot] = {}
+        self._positions: dict[str, PaperPosition] = {}
+        self._realized_pnl = 0.0
+        self._cycle_count = 0
+        self._last_update_at: datetime | None = None
+        self._loop_error: str | None = None
+
+    def reset_state(self) -> None:
+        self._last_decision = None
+        self._latest_signals.clear()
+        self._positions.clear()
+        self._realized_pnl = 0.0
+        self._cycle_count = 0
+        self._last_update_at = None
+        self._loop_error = None
 
     def blotter(self) -> list[PaperTradeDecision]:
-        return self._state.paper_decisions or self._blotter
+        return self._state.paper_decisions
 
     def status(self) -> PaperTradingStatus:
-        active_market_ids = [market.id for market in self._state.markets.values()]
-        realized = sum(
-            (decision.price - 0.5) * decision.size
-            for decision in self.blotter()
-            if decision.status == "simulated_fill"
-        )
-        positions: dict[str, float] = {}
-        for decision in self.blotter():
-            if decision.side == "buy_yes":
-                positions[str(decision.market_id)] = positions.get(str(decision.market_id), 0.0) + decision.size
-            elif decision.side == "buy_no":
-                positions[str(decision.market_id)] = positions.get(str(decision.market_id), 0.0) - decision.size
+        selected_market_ids = [UUID(market_id) for market_id in self._selected_market_ids()]
+        unrealized_pnl = sum(position.unrealized_pnl for position in self._positions.values())
+        open_positions = {market_id: position.size if position.side == "buy_yes" else -position.size for market_id, position in self._positions.items()}
         return PaperTradingStatus(
             strategy_name=self._strategy_name,
             dry_run_only=not self._settings.live_execution_enabled,
-            active_market_ids=active_market_ids,
-            open_positions=positions,
-            unrealized_pnl=0.0,
-            realized_pnl=realized,
+            active_market_ids=[market.id for market in self._state.markets.values()],
+            selected_market_ids=selected_market_ids,
+            open_positions=open_positions,
+            position_details=list(self._positions.values()),
+            latest_signals=sorted(self._latest_signals.values(), key=lambda item: item.ts, reverse=True),
+            last_decision=self._last_decision,
+            loop_running=self._loop_task is not None and not self._loop_task.done(),
+            last_update_at=self._last_update_at,
+            cycle_count=self._cycle_count,
+            loop_error=self._loop_error,
+            unrealized_pnl=unrealized_pnl,
+            realized_pnl=self._realized_pnl,
         )
 
     def run_once(self, market_id: str) -> PaperTradeDecision:
+        return self._evaluate_market(market_id)
+
+    async def start_loop(self) -> None:
+        if not self._settings.paper_trading_loop_enabled:
+            logger.info("Paper trading loop disabled by config")
+            return
+        if self._loop_task is not None and not self._loop_task.done():
+            return
+        logger.info("Starting paper trading loop with strategy=%s interval=%ss", self._strategy_name, self._settings.paper_trading_loop_seconds)
+        self._loop_task = asyncio.create_task(self._run_loop(), name="paper-trading-loop")
+
+    async def stop_loop(self) -> None:
+        if self._loop_task is None:
+            return
+        self._loop_task.cancel()
+        try:
+            await self._loop_task
+        except asyncio.CancelledError:
+            logger.info("Stopped paper trading loop")
+        self._loop_task = None
+
+    async def _run_loop(self) -> None:
+        while True:
+            try:
+                self.run_cycle()
+                self._loop_error = None
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._loop_error = str(exc)
+                logger.exception("Paper trading loop cycle failed")
+            await asyncio.sleep(max(self._settings.paper_trading_loop_seconds, 5))
+
+    def run_cycle(self) -> list[PaperTradeDecision]:
+        decisions: list[PaperTradeDecision] = []
+        for market_id in self._selected_market_ids():
+            decisions.append(self._evaluate_market(market_id))
+        self._cycle_count += 1
+        self._last_update_at = datetime.now(timezone.utc)
+        return decisions
+
+    def _selected_market_ids(self) -> list[str]:
+        allowed_underlyings = {
+            value.strip().upper()
+            for value in self._settings.paper_trading_underlyings.split(",")
+            if value.strip()
+        }
+        allowed_market_types = {
+            value.strip()
+            for value in self._settings.paper_trading_market_types.split(",")
+            if value.strip()
+        }
+        selected: dict[tuple[str, str], tuple[str, object]] = {}
+        for market_id, market in self._state.markets.items():
+            if market.status != "active":
+                continue
+            underlying = (market.underlying or "").upper()
+            if allowed_underlyings and underlying not in allowed_underlyings:
+                continue
+            if allowed_market_types and market.market_type not in allowed_market_types:
+                continue
+            key = (underlying, market.market_type)
+            current = selected.get(key)
+            closes_at = market.closes_at or datetime.max.replace(tzinfo=timezone.utc)
+            if current is None or (current[1].closes_at or datetime.max.replace(tzinfo=timezone.utc)) > closes_at:
+                selected[key] = (market_id, market)
+        return [market_id for market_id, _ in selected.values()]
+
+    def _evaluate_market(self, market_id: str) -> PaperTradeDecision:
         snapshot = self._feature_engine.compute_snapshot(market_id)
         strategy = self._strategy_registry[self._strategy_name]
         midpoint = (
             (snapshot.best_bid + snapshot.best_ask) / 2
             if snapshot.best_bid is not None and snapshot.best_ask is not None
-            else 0.5
+            else snapshot.fair_value_estimate or 0.5
         )
         decision = strategy.decide(StrategyContext(market_price=midpoint, feature_snapshot=snapshot))
+        self._latest_signals[market_id] = PaperSignalSnapshot(
+            market_id=snapshot.market_id,
+            ts=snapshot.ts,
+            signal_value=decision.signal_value,
+            decision=decision.decision,
+            confidence=decision.confidence,
+            fair_value_gap=snapshot.fair_value_gap,
+            midpoint=midpoint,
+        )
         paper_decision = PaperTradeDecision(
             ts=snapshot.ts,
             market_id=snapshot.market_id,
-            action="strategy_eval",
+            action="loop_eval",
             side=decision.decision,
             price=midpoint,
             size=100.0 if decision.decision not in {"hold", "no_trade"} else 0.0,
             status="simulated_fill" if decision.decision not in {"hold", "no_trade"} else "no_action",
             reason=decision.reason,
+            signal_value=decision.signal_value,
+            confidence=decision.confidence,
         )
+        self._apply_decision(paper_decision)
         self._state.paper_decisions.append(paper_decision)
+        self._last_decision = paper_decision
         if self._persistence is not None:
             self._persistence.save_paper_decision(paper_decision, is_dry_run=True)
         return paper_decision
+
+    def _apply_decision(self, decision: PaperTradeDecision) -> None:
+        market_key = str(decision.market_id)
+        current_position = self._positions.get(market_key)
+        if current_position is not None:
+            current_position.mark_price = decision.price
+            direction = 1.0 if current_position.side == "buy_yes" else -1.0
+            current_position.unrealized_pnl = (decision.price - current_position.avg_price) * current_position.size * direction
+
+        if decision.status != "simulated_fill":
+            return
+
+        target_side = None
+        if decision.side in {"buy_yes", "passive_yes"}:
+            target_side = "buy_yes"
+        elif decision.side in {"buy_no", "passive_no"}:
+            target_side = "buy_no"
+        if target_side is None or decision.size <= 0:
+            return
+
+        if current_position is not None and current_position.side != target_side:
+            self._realized_pnl += current_position.unrealized_pnl
+            del self._positions[market_key]
+            current_position = None
+
+        if current_position is None:
+            self._positions[market_key] = PaperPosition(
+                market_id=decision.market_id,
+                side=target_side,
+                size=decision.size,
+                avg_price=decision.price,
+                mark_price=decision.price,
+                unrealized_pnl=0.0,
+                opened_at=decision.ts,
+            )
+        else:
+            blended_notional = (current_position.avg_price * current_position.size) + (decision.price * decision.size)
+            current_position.size += decision.size
+            current_position.avg_price = blended_notional / current_position.size
+            current_position.mark_price = decision.price
+            current_position.unrealized_pnl = (
+                (decision.price - current_position.avg_price)
+                * current_position.size
+                * (1.0 if current_position.side == "buy_yes" else -1.0)
+            )
 
     def risk_settings(self) -> RiskSettings:
         return RiskSettings(
