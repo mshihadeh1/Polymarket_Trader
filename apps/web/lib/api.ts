@@ -240,6 +240,8 @@ export async function fetchSystemHealth(): Promise<{
   mock_polymarket: boolean;
   polymarket_client: string;
   polymarket_observation: PolymarketObservationStatus;
+  external_historical_provider: string;
+  mock_external_provider: boolean;
 }> {
   const response = await fetch(`${baseUrl}/api/v1/system/health`, {
     cache: "no-store",
