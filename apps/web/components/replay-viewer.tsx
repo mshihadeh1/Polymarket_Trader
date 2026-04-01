@@ -1,4 +1,5 @@
 import { fetchMarkets, fetchReplay } from "../lib/api";
+import { formatLosAngelesDateTime, losAngelesTimeZoneLabel } from "../lib/time";
 
 type ReplayViewerProps = {
   marketId?: string;
@@ -30,6 +31,7 @@ export async function ReplayViewer({ marketId }: ReplayViewerProps) {
             </div>
           </div>
           <p className="muted">Event timeline for market <span className="mono">{selectedMarketId}</span>.</p>
+          <p className="muted">Times shown in {losAngelesTimeZoneLabel()}.</p>
         </div>
         <div className="timeline-controls">
           <button type="button">Play</button>
@@ -45,7 +47,7 @@ export async function ReplayViewer({ marketId }: ReplayViewerProps) {
                   <span className={`badge ${event.venue === "polymarket" ? "badge-real" : "badge-provider"}`}>
                     {event.venue}
                   </span>
-                  <span className="badge badge-historical">{new Date(event.ts).toLocaleString()}</span>
+                  <span className="badge badge-historical">{formatLosAngelesDateTime(event.ts)}</span>
                 </div>
               </div>
               <pre>{JSON.stringify(event.payload, null, 2)}</pre>

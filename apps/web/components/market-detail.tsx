@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { fetchFeatures, fetchLiveFeatureView, fetchMarketDetail, fetchOrderBook, fetchSystemHealth, fetchTrades } from "../lib/api";
+import { formatLosAngelesDateTime, formatLosAngelesTime, losAngelesTimeZoneLabel } from "../lib/time";
 
 function pct(value?: number): string {
   if (value === undefined || value === null) return "n/a";
@@ -44,8 +45,9 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
           </div>
           <p className="muted">
             Underlying {market.underlying} | strike {market.price_to_beat ?? "n/a"} | close{" "}
-            {market.closes_at ? new Date(market.closes_at).toLocaleString() : "n/a"}
+            {formatLosAngelesDateTime(market.closes_at)}
           </p>
+          <p className="muted">Times shown in {losAngelesTimeZoneLabel()}.</p>
         </div>
         <div className="detail-grid">
           <div className="metric-card">
@@ -67,7 +69,7 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
           </div>
           <div className="metric-card">
             <span className="metric-label">Observation stream</span>
-            <span className="metric-value">{observation.last_event_at ? new Date(observation.last_event_at).toLocaleTimeString() : "n/a"}</span>
+            <span className="metric-value">{formatLosAngelesTime(observation.last_event_at)}</span>
             <span className="muted">
               reconnects {observation.reconnect_count} | dropped {observation.dropped_event_count}
             </span>
@@ -96,7 +98,7 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
                   <span className="badge badge-provider">{trade.venue}</span>
                 </div>
                 <strong>{trade.size} @ {trade.price.toFixed(3)}</strong>
-                <span className="muted">{new Date(trade.ts).toLocaleString()}</span>
+                <span className="muted">{formatLosAngelesDateTime(trade.ts)}</span>
               </div>
             ))
           )}
@@ -145,7 +147,7 @@ export async function MarketDetail({ marketId }: { marketId: string }) {
             <tbody>
               {features.map((feature) => (
                 <tr key={feature.ts}>
-                  <td>{new Date(feature.ts).toLocaleString()}</td>
+                  <td>{formatLosAngelesDateTime(feature.ts)}</td>
                   <td>{feature.polymarket_cvd}</td>
                   <td>{feature.external_cvd}</td>
                   <td>{feature.fair_value_estimate?.toFixed(3) ?? "n/a"}</td>

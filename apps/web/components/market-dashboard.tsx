@@ -1,10 +1,10 @@
 import Link from "next/link";
 
 import { fetchMarkets, fetchPaperBlotter, fetchSystemHealth } from "../lib/api";
+import { formatLosAngelesDateTime, losAngelesTimeZoneLabel } from "../lib/time";
 
 function formatTime(value?: string): string {
-  if (!value) return "n/a";
-  return new Date(value).toLocaleString();
+  return formatLosAngelesDateTime(value);
 }
 
 export async function MarketDashboard() {
@@ -179,6 +179,7 @@ export async function MarketDashboard() {
         <div className="section-head">
           <h2>Active markets</h2>
           <p className="muted">Current Polymarket contracts with quick access into detail and replay.</p>
+          <p className="muted">Times shown in {losAngelesTimeZoneLabel()}.</p>
         </div>
         <div className="table-wrap">
           <table className="data-table">

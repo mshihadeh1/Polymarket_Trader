@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { fetchClosedMarkets, fetchClosedMarketResults, fetchStrategies, runClosedMarketComparison } from "../lib/api";
+import { formatLosAngelesDateTime, losAngelesTimeZoneLabel } from "../lib/time";
 
 function metric(report: Awaited<ReturnType<typeof fetchClosedMarketResults>>[number], label: string): string {
   const value = report.metrics.find((entry) => entry.label === label)?.value;
@@ -116,13 +117,14 @@ export async function BacktestResults({
         <div className="section-head">
           <h2>Recent closed markets</h2>
           <p className="muted">Closed Polymarket windows currently eligible for this evaluator.</p>
+          <p className="muted">Times shown in {losAngelesTimeZoneLabel()}.</p>
         </div>
         <div className="stack">
           {recentClosedMarkets.slice(0, 6).map((market) => (
             <div className="list-card" key={market.market_id}>
               <strong>{market.title}</strong>
               <span className="table-meta">{market.asset} | {market.timeframe}</span>
-              <span className="muted">{new Date(market.market_close_time).toLocaleString()}</span>
+              <span className="muted">{formatLosAngelesDateTime(market.market_close_time)}</span>
             </div>
           ))}
         </div>

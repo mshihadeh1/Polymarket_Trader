@@ -1,4 +1,5 @@
 import { fetchPaperBlotter, fetchPaperStatus } from "../lib/api";
+import { formatLosAngelesDateTime, losAngelesTimeZoneLabel } from "../lib/time";
 
 export async function PaperTradingPanel() {
   const [status, blotter] = await Promise.all([
@@ -19,6 +20,7 @@ export async function PaperTradingPanel() {
             </div>
           </div>
           <p className="muted">Dry-run only. Live execution remains opt-in and disabled.</p>
+          <p className="muted">Times shown in {losAngelesTimeZoneLabel()}.</p>
         </div>
         <div className="quad-grid">
           <div className="metric-card">
@@ -64,7 +66,7 @@ export async function PaperTradingPanel() {
           </div>
           <div className="list-card">
             <strong>Last update</strong>
-            <span>{status.last_update_at ? new Date(status.last_update_at).toLocaleString() : "n/a"}</span>
+            <span>{formatLosAngelesDateTime(status.last_update_at)}</span>
           </div>
           <div className="list-card">
             <strong>Cycles</strong>
@@ -168,7 +170,7 @@ export async function PaperTradingPanel() {
             <tbody>
               {blotter.map((entry) => (
                 <tr key={`${entry.market_id}-${entry.ts}-${entry.action}`}>
-                  <td>{new Date(entry.ts).toLocaleString()}</td>
+                  <td>{formatLosAngelesDateTime(entry.ts)}</td>
                   <td className="mono">{entry.market_id}</td>
                   <td>{entry.action}</td>
                   <td>
