@@ -10,6 +10,9 @@ from packages.core_types.schemas import (
     HistoricalBar,
     MarketDetail,
     MarketSummary,
+    MinuteBatchReport,
+    MinuteFeatureSnapshot,
+    MinuteResearchRow,
     OrderBookSnapshot,
     PaperTradeDecision,
     SyntheticBatchReport,
@@ -40,6 +43,9 @@ class InMemoryState:
     external_dataset_validation: dict[str, DatasetValidationReport] = field(default_factory=dict)
     external_feature_availability: dict[str, dict] = field(default_factory=dict)
     feature_snapshots: dict[str, list[FeatureSnapshot]] = field(default_factory=dict)
+    minute_research_rows: dict[str, MinuteResearchRow] = field(default_factory=dict)
+    minute_feature_snapshots: dict[str, list[MinuteFeatureSnapshot]] = field(default_factory=dict)
+    minute_batch_reports: list[MinuteBatchReport] = field(default_factory=list)
     synthetic_market_samples: dict[str, SyntheticMarketSample] = field(default_factory=dict)
     synthetic_feature_snapshots: dict[str, list[SyntheticFeatureSnapshot]] = field(default_factory=dict)
     synthetic_batch_reports: list[SyntheticBatchReport] = field(default_factory=list)

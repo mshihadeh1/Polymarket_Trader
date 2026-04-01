@@ -232,20 +232,23 @@ Startup validation reports:
 - duplicate count
 - schema issues
 
-## Synthetic Research Workflow
+## Minute Research Workflow
 
-This is the first-class Layer 1 workflow. It turns the local 1-minute CSV history into cached BTC up/down samples and scores a small strategy family set before comparing the same logic against real closed-market validation.
+This is the first-class Layer 1 workflow. It turns the local 1-minute CSV history into cached BTC minute decision rows, computes point-in-time features, and scores a small strategy family set separately on the 5m and 15m horizons before comparing the same logic against real closed-market validation.
 
 Open:
 
 - [http://localhost:3000/research/btc-updown](http://localhost:3000/research/btc-updown)
-- [http://localhost:8000/api/v1/research/synthetic/samples](http://localhost:8000/api/v1/research/synthetic/samples)
-- [http://localhost:8000/api/v1/research/synthetic/results](http://localhost:8000/api/v1/research/synthetic/results)
+- [http://localhost:8000/api/v1/research/minute/rows](http://localhost:8000/api/v1/research/minute/rows)
+- [http://localhost:8000/api/v1/research/minute/results](http://localhost:8000/api/v1/research/minute/results)
+- [http://localhost:8000/api/v1/research/minute/live-feature-view?asset=BTC](http://localhost:8000/api/v1/research/minute/live-feature-view?asset=BTC)
+- [http://localhost:8000/api/v1/research/validation/results](http://localhost:8000/api/v1/research/validation/results)
 
 What this does today:
-- generates aligned synthetic BTC 5m and 15m samples from 1-minute bars
-- computes point-in-time features at open and optional checkpoints
+- generates minute-aligned BTC decision rows from 1-minute bars
+- computes point-in-time features at each decision minute
 - runs momentum, mean-reversion, breakout, and regime-filter strategy families
+- scores 5m and 15m horizons separately
 - caches results so the page can read stored reports instead of recomputing everything
 - scores the same feature pipeline on recent real closed BTC 5m/15m markets as validation
 
@@ -255,6 +258,9 @@ Truthful limitation:
 You can inspect this through:
 - `GET /api/v1/external-provider`
 - `GET /api/v1/system/health`
+- `POST /api/v1/research/minute/build`
+- `POST /api/v1/research/minute/run`
+- `POST /api/v1/research/validation/run`
 
 Downstream modules remain provider-agnostic:
 - feature engine reads normalized bars
@@ -510,9 +516,9 @@ curl -X POST "http://localhost:8000/api/v1/ingestion/hydrate-closed-markets?iden
 ```
 
 7. Open [http://localhost:3000/research/btc-updown](http://localhost:3000/research/btc-updown) to inspect:
-- cached synthetic BTC samples
-- run controls for asset, timeframe, strategy, and date range
-- synthetic versus real-validation report summaries
+- cached BTC minute decision rows
+- run controls for asset, strategy, timeframe filter, and date range
+- 5m and 15m synthetic report summaries plus real-validation report summaries
 
 8. Open [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) if you want the existing closed-market comparison view:
 - eligible closed markets
@@ -537,12 +543,14 @@ curl -X POST "http://localhost:8000/api/v1/ingestion/hydrate-closed-markets?iden
 - `GET /api/v1/backtests`
 - `GET /api/v1/backtests/{run_id}`
 - `GET /api/v1/research/strategies`
-- `GET /api/v1/research/synthetic/samples`
-- `POST /api/v1/research/synthetic/build`
-- `POST /api/v1/research/synthetic/run`
-- `GET /api/v1/research/synthetic/results`
+- `GET /api/v1/research/minute/rows`
+- `POST /api/v1/research/minute/build`
+- `POST /api/v1/research/minute/run`
+- `GET /api/v1/research/minute/results`
+- `GET /api/v1/research/minute/live-feature-view`
 - `POST /api/v1/research/validation/run`
 - `GET /api/v1/research/validation/results`
+- `GET /api/v1/research/minute/strategies`
 - `GET /api/v1/evaluations/closed-markets`
 - `POST /api/v1/evaluations/closed-markets/run`
 - `GET /api/v1/evaluations/results`

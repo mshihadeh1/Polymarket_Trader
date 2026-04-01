@@ -188,6 +188,82 @@ export type SyntheticBatchReport = {
   records: SyntheticEvaluationRecord[];
 };
 
+export type MinuteResearchRow = {
+  row_id: string;
+  asset: string;
+  source: "synthetic" | "real_validation";
+  decision_time: string;
+  reference_price: number;
+  close_5m: number;
+  close_15m: number;
+  label_up_5m: boolean;
+  label_up_15m: boolean;
+  future_return_5m: number;
+  future_return_15m: number;
+  source_provider: string;
+  market_id?: string | null;
+  notes: string[];
+};
+
+export type MinuteFeatureSnapshot = {
+  row_id: string;
+  asset: string;
+  source: "synthetic" | "real_validation";
+  decision_time: string;
+  current_price: number;
+  ret_1m?: number | null;
+  ret_3m?: number | null;
+  ret_5m?: number | null;
+  ret_15m?: number | null;
+  ret_30m?: number | null;
+  vol_5m?: number | null;
+  vol_15m?: number | null;
+  vol_30m?: number | null;
+  distance_from_mean?: number | null;
+  distance_from_recent_high?: number | null;
+  distance_from_recent_low?: number | null;
+  range_percentile?: number | null;
+  slope_5m?: number | null;
+  slope_15m?: number | null;
+  acceleration?: number | null;
+  regime: string;
+  session_bucket: string;
+  feature_summary: Record<string, number | string | null>;
+};
+
+export type MinuteEvaluationRecord = {
+  row_id: string;
+  asset: string;
+  source: "synthetic" | "real_validation";
+  decision_time: string;
+  horizon_minutes: number;
+  strategy_name: string;
+  decision: "higher" | "lower" | "hold";
+  confidence: number;
+  signal_value: number;
+  actual_label_up: boolean;
+  correctness?: boolean | null;
+  future_return: number;
+  reference_price: number;
+  close_price: number;
+  feature_snapshot_summary: Record<string, number | string | null>;
+  notes: string[];
+};
+
+export type MinuteBatchReport = {
+  run_id: string;
+  strategy_name: string;
+  source: "synthetic" | "real_validation";
+  asset_filter?: string;
+  timeframe_filter?: string;
+  limit: number;
+  created_at?: string;
+  total_rows: number;
+  metrics: { label: string; value: number }[];
+  coverage: Record<string, number>;
+  records: MinuteEvaluationRecord[];
+};
+
 export type PaperStatus = {
   strategy_name: string;
   dry_run_only: boolean;
@@ -427,6 +503,126 @@ export async function fetchResearchStrategies(): Promise<Strategy[]> {
   const response = await fetch(`${baseUrl}/api/v1/research/strategies`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Failed to fetch research strategies");
+  }
+  return response.json();
+}
+
+export async function fetchMinuteStrategies(): Promise<Strategy[]> {
+  const response = await fetch(`${baseUrl}/api/v1/research/minute/strategies`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch minute strategies");
+  }
+  return response.json();
+}
+
+export async function fetchMinuteRows(
+  asset = "BTC",
+  limit = 200,
+  start?: string,
+  end?: string,
+): Promise<MinuteResearchRow[]> {
+  const params = new URLSearchParams({ asset, limit: String(limit) });
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const response = await fetch(`${baseUrl}/api/v1/research/minute/rows?${params.toString()}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch minute rows");
+  }
+  return response.json();
+}
+
+export async function buildMinuteRows(
+  asset = "BTC",
+  start?: string,
+  end?: string,
+  refresh = false,
+): Promise<MinuteResearchRow[]> {
+  const params = new URLSearchParams({ asset, refresh: String(refresh) });
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const response = await fetch(`${baseUrl}/api/v1/research/minute/build?${params.toString()}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to build minute rows");
+  }
+  return response.json();
+}
+
+export async function runMinuteBatch(
+  asset = "BTC",
+  timeframe = "crypto_5m",
+  strategyName = "minute_momentum",
+  limit = 500,
+  start?: string,
+  end?: string,
+  refresh = false,
+): Promise<MinuteBatchReport> {
+  const params = new URLSearchParams({
+    asset,
+    timeframe,
+    strategy_name: strategyName,
+    limit: String(limit),
+    refresh: String(refresh),
+  });
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const response = await fetch(`${baseUrl}/api/v1/research/minute/run?${params.toString()}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to run minute batch");
+  }
+  return response.json();
+}
+
+export async function fetchMinuteResults(timeframe?: string): Promise<MinuteBatchReport[]> {
+  const params = new URLSearchParams();
+  if (timeframe) params.set("timeframe", timeframe);
+  const url = params.toString()
+    ? `${baseUrl}/api/v1/research/minute/results?${params.toString()}`
+    : `${baseUrl}/api/v1/research/minute/results`;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch minute results");
+  }
+  return response.json();
+}
+
+export async function runMinuteValidationBatch(
+  asset = "BTC",
+  timeframe?: string,
+  strategyName = "minute_momentum",
+  limit = 50,
+  start?: string,
+  end?: string,
+  refresh = false,
+): Promise<MinuteBatchReport> {
+  const params = new URLSearchParams({ asset, strategy_name: strategyName, limit: String(limit), refresh: String(refresh) });
+  if (timeframe) params.set("timeframe", timeframe);
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const response = await fetch(`${baseUrl}/api/v1/research/validation/run?${params.toString()}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to run minute validation batch");
+  }
+  return response.json();
+}
+
+export async function fetchMinuteValidationResults(timeframe?: string): Promise<MinuteBatchReport[]> {
+  const params = new URLSearchParams();
+  if (timeframe) params.set("timeframe", timeframe);
+  const url = params.toString()
+    ? `${baseUrl}/api/v1/research/validation/results?${params.toString()}`
+    : `${baseUrl}/api/v1/research/validation/results`;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch minute validation results");
   }
   return response.json();
 }

@@ -268,6 +268,82 @@ class FeatureAvailability(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class MinuteResearchRow(BaseModel):
+    row_id: str
+    asset: str
+    source: Literal["synthetic", "real_validation"] = "synthetic"
+    decision_time: datetime
+    reference_price: float
+    close_5m: float
+    close_15m: float
+    label_up_5m: bool
+    label_up_15m: bool
+    future_return_5m: float
+    future_return_15m: float
+    source_provider: str = "csv"
+    market_id: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class MinuteFeatureSnapshot(BaseModel):
+    row_id: str
+    asset: str
+    source: Literal["synthetic", "real_validation"] = "synthetic"
+    decision_time: datetime
+    current_price: float
+    ret_1m: float | None = None
+    ret_3m: float | None = None
+    ret_5m: float | None = None
+    ret_15m: float | None = None
+    ret_30m: float | None = None
+    vol_5m: float | None = None
+    vol_15m: float | None = None
+    vol_30m: float | None = None
+    distance_from_mean: float | None = None
+    distance_from_recent_high: float | None = None
+    distance_from_recent_low: float | None = None
+    range_percentile: float | None = None
+    slope_5m: float | None = None
+    slope_15m: float | None = None
+    acceleration: float | None = None
+    regime: str = "unknown"
+    session_bucket: str = "unknown"
+    feature_summary: dict[str, float | str | None] = Field(default_factory=dict)
+
+
+class MinuteEvaluationRecord(BaseModel):
+    row_id: str
+    asset: str
+    source: Literal["synthetic", "real_validation"] = "synthetic"
+    decision_time: datetime
+    horizon_minutes: int
+    strategy_name: str
+    decision: Literal["higher", "lower", "hold"]
+    confidence: float
+    signal_value: float
+    actual_label_up: bool
+    correctness: bool | None = None
+    future_return: float
+    reference_price: float
+    close_price: float
+    feature_snapshot_summary: dict[str, float | str | None] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+
+class MinuteBatchReport(BaseModel):
+    run_id: str
+    strategy_name: str
+    source: Literal["synthetic", "real_validation"] = "synthetic"
+    asset_filter: str | None = None
+    timeframe_filter: str | None = None
+    limit: int = 0
+    created_at: datetime | None = None
+    total_rows: int = 0
+    metrics: list[BacktestMetric] = Field(default_factory=list)
+    coverage: dict[str, int] = Field(default_factory=dict)
+    records: list[MinuteEvaluationRecord] = Field(default_factory=list)
+
+
 class SyntheticMarketSample(BaseModel):
     sample_id: str
     market_id: str | None = None
@@ -394,7 +470,7 @@ class StrategyDescriptor(BaseModel):
 
 class StrategyDecision(BaseModel):
     signal_value: float
-    decision: Literal["buy_yes", "buy_no", "passive_yes", "passive_no", "hold", "no_trade"]
+    decision: Literal["buy_yes", "buy_no", "passive_yes", "passive_no", "hold", "no_trade", "higher", "lower"]
     confidence: float
     reason: str
     reasoning_fields: dict[str, float | str | None] = Field(default_factory=dict)

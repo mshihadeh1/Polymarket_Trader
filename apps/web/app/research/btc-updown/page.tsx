@@ -1,23 +1,23 @@
 import {
-  fetchResearchStrategies,
-  fetchSyntheticResults,
-  fetchSyntheticSamples,
-  fetchValidationResults,
+  fetchMinuteResults,
+  fetchMinuteRows,
+  fetchMinuteStrategies,
+  fetchMinuteValidationResults,
 } from "../../../lib/api";
 import { ResearchView } from "../../../components/research-view";
 
 export default async function BtcUpDownResearchPage() {
-  const [samples, syntheticResults, validationResults, strategies] = await Promise.all([
-    fetchSyntheticSamples("BTC", undefined, 100),
-    fetchSyntheticResults(),
-    fetchValidationResults(),
-    fetchResearchStrategies(),
+  const [rows, minuteResults, validationResults, strategies] = await Promise.all([
+    fetchMinuteRows("BTC", 200),
+    fetchMinuteResults(),
+    fetchMinuteValidationResults(),
+    fetchMinuteStrategies(),
   ]);
 
   return (
     <ResearchView
-      initialSamples={samples}
-      initialSyntheticReports={syntheticResults}
+      initialRows={rows}
+      initialMinuteReports={minuteResults}
       initialValidationReports={validationResults}
       initialStrategies={strategies}
     />

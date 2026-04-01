@@ -10,6 +10,10 @@ from packages.core_types.schemas import (
     BacktestReport,
     FeatureSnapshot,
     MarketSummary,
+    MinuteBatchReport,
+    MinuteEvaluationRecord,
+    MinuteFeatureSnapshot,
+    MinuteResearchRow,
     PaperTradeDecision,
     SyntheticBatchReport,
     SyntheticEvaluationRecord,
@@ -22,6 +26,9 @@ from packages.core_types.schemas import (
 from packages.db.models import (
     BacktestRunRecord,
     FeatureSnapshotRecord,
+    MinuteBatchReportRecord,
+    MinuteFeatureSnapshotRecord,
+    MinuteResearchRowRecord,
     PaperDecisionRecord,
     PolymarketBookRecord,
     PolymarketMarketRecord,
@@ -84,6 +91,74 @@ class ResearchPersistence:
         )
         self._write(record, merge=True)
 
+    def save_minute_research_row(self, row: MinuteResearchRow) -> None:
+        if not self._session_factory:
+            return
+        record = MinuteResearchRowRecord(
+            id=row.row_id,
+            asset=row.asset,
+            source=row.source,
+            decision_time=row.decision_time,
+            horizon_minutes=15,
+            reference_price=row.reference_price,
+            close_5m=row.close_5m,
+            close_15m=row.close_15m,
+            label_up_5m=row.label_up_5m,
+            label_up_15m=row.label_up_15m,
+            future_return_5m=row.future_return_5m,
+            future_return_15m=row.future_return_15m,
+            source_provider=row.source_provider,
+            market_id=row.market_id,
+            payload=row.model_dump(mode="json"),
+        )
+        self._write(record, merge=True)
+
+    def save_minute_feature_snapshot(self, snapshot: MinuteFeatureSnapshot) -> None:
+        if not self._session_factory:
+            return
+        record = MinuteFeatureSnapshotRecord(
+            id=f"{snapshot.row_id}:{snapshot.decision_time.isoformat()}",
+            row_id=snapshot.row_id,
+            asset=snapshot.asset,
+            source=snapshot.source,
+            decision_time=snapshot.decision_time,
+            payload=snapshot.model_dump(mode="json"),
+        )
+        self._write(record, merge=True)
+
+    def save_minute_batch_report(self, report: MinuteBatchReport) -> None:
+        if not self._session_factory:
+            return
+        record = MinuteBatchReportRecord(
+            id=report.run_id,
+            strategy_name=report.strategy_name,
+            source=report.source,
+            asset_filter=report.asset_filter,
+            timeframe_filter=report.timeframe_filter,
+            total_rows=report.total_rows,
+            metrics=[metric.model_dump(mode="json") for metric in report.metrics],
+            coverage=report.coverage,
+            records=[record.model_dump(mode="json") for record in report.records],
+        )
+        self._write(record, merge=True)
+
+    def list_minute_research_rows(self) -> list[MinuteResearchRow]:
+        if not self._session_factory:
+            return []
+        with self._session_factory() as session:
+            rows = session.query(MinuteResearchRowRecord).order_by(MinuteResearchRowRecord.decision_time.asc()).all()
+        return [MinuteResearchRow(**row.payload) for row in rows]
+
+    def list_minute_feature_snapshots(self, row_id: str | None = None) -> list[MinuteFeatureSnapshot]:
+        if not self._session_factory:
+            return []
+        with self._session_factory() as session:
+            query = session.query(MinuteFeatureSnapshotRecord)
+            if row_id is not None:
+                query = query.filter(MinuteFeatureSnapshotRecord.row_id == row_id)
+            rows = query.order_by(MinuteFeatureSnapshotRecord.decision_time.asc()).all()
+        return [MinuteFeatureSnapshot(**row.payload) for row in rows]
+
     def save_synthetic_feature_snapshot(self, snapshot: SyntheticFeatureSnapshot) -> None:
         if not self._session_factory:
             return
@@ -143,6 +218,27 @@ class ResearchPersistence:
                 trade_count=row.trade_count,
                 decisions=row.decisions,
                 notes=row.notes,
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
+
+    def list_minute_batch_reports(self) -> list[MinuteBatchReport]:
+        if not self._session_factory:
+            return []
+        with self._session_factory() as session:
+            rows = session.query(MinuteBatchReportRecord).order_by(MinuteBatchReportRecord.created_at.desc()).all()
+        return [
+            MinuteBatchReport(
+                run_id=row.id,
+                strategy_name=row.strategy_name,
+                source=row.source,
+                asset_filter=row.asset_filter,
+                timeframe_filter=row.timeframe_filter,
+                total_rows=row.total_rows,
+                metrics=[BacktestMetric(**metric) for metric in row.metrics],
+                coverage=row.coverage,
+                records=[MinuteEvaluationRecord(**record) for record in row.records],
                 created_at=row.created_at,
             )
             for row in rows
