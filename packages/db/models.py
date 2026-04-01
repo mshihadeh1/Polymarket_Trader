@@ -36,6 +36,49 @@ class BacktestRunRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
 
 
+class SyntheticMarketSampleRecord(Base):
+    __tablename__ = "synthetic_market_samples_cache"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    market_id: Mapped[str | None] = mapped_column(String, index=True)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    asset: Mapped[str] = mapped_column(String, nullable=False)
+    timeframe: Mapped[str] = mapped_column(String, nullable=False)
+    market_open_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    market_close_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    decision_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_provider: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+
+class SyntheticFeatureSnapshotRecord(Base):
+    __tablename__ = "synthetic_feature_snapshots_cache"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    sample_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    market_id: Mapped[str | None] = mapped_column(String, index=True)
+    decision_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+
+class SyntheticBatchReportRecord(Base):
+    __tablename__ = "synthetic_batch_reports_cache"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    strategy_name: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    asset_filter: Mapped[str | None] = mapped_column(String)
+    timeframe_filter: Mapped[str | None] = mapped_column(String)
+    decision_time: Mapped[str] = mapped_column(String, nullable=False)
+    total_samples: Mapped[int] = mapped_column(default=0, nullable=False)
+    metrics: Mapped[list] = mapped_column(JSON, nullable=False)
+    coverage: Mapped[dict] = mapped_column(JSON, nullable=False)
+    records: Mapped[list] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+
 class PaperDecisionRecord(Base):
     __tablename__ = "paper_decisions_cache"
 

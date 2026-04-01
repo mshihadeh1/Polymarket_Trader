@@ -11,6 +11,7 @@ from packages.clients.polymarket_client import MockPolymarketClient, PolymarketC
 from packages.config import Settings
 from packages.db import ResearchPersistence, create_session_factory
 from services.backtester import BacktesterService
+from services.backtester.synthetic_research import SyntheticResearchService
 from services.execution_engine import ExecutionEngineService
 from services.feature_engine import FeatureEngineService, MarketWindowService
 from services.fair_value_models import BaselineFairValueModel
@@ -35,6 +36,7 @@ class Container:
     market_window: MarketWindowService
     feature_engine: FeatureEngineService
     backtester: BacktesterService
+    synthetic_research: SyntheticResearchService
     replay: ReplayService
     paper_trader: PaperTraderService
     execution_engine: ExecutionEngineService
@@ -63,6 +65,9 @@ class Container:
             self.state.external_feature_availability.clear()
             self.state.feature_snapshots.clear()
             self.state.backtest_reports.clear()
+            self.state.synthetic_market_samples.clear()
+            self.state.synthetic_feature_snapshots.clear()
+            self.state.synthetic_batch_reports.clear()
             self.state.closed_market_batch_reports.clear()
             self.state.paper_decisions.clear()
             self.state.polymarket_observation.source_mode = "mock" if self.polymarket_client.is_mock else "real"
@@ -128,6 +133,13 @@ def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Cont
         persistence=persistence,
     )
     hyperliquid_ingestor = HyperliquidIngestorService(state, provider=external_provider, recent_client=hyperliquid_recent_client)
+    synthetic_research = SyntheticResearchService(
+        settings=settings,
+        state=state,
+        historical_provider=external_provider,
+        polymarket_client=polymarket_client,
+        persistence=persistence,
+    )
     container = Container(
         settings=settings,
         state=state,
@@ -144,6 +156,7 @@ def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Cont
             external_ingestor=hyperliquid_ingestor,
             persistence=persistence,
         ),
+        synthetic_research=synthetic_research,
         replay=ReplayService(state),
         paper_trader=PaperTraderService(
             settings=settings,

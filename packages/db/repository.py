@@ -11,6 +11,10 @@ from packages.core_types.schemas import (
     FeatureSnapshot,
     MarketSummary,
     PaperTradeDecision,
+    SyntheticBatchReport,
+    SyntheticEvaluationRecord,
+    SyntheticFeatureSnapshot,
+    SyntheticMarketSample,
     PolymarketTopOfBook,
     PolymarketTrade,
     RawPolymarketEvent,
@@ -23,6 +27,9 @@ from packages.db.models import (
     PolymarketMarketRecord,
     PolymarketRawEventRecord,
     PolymarketTradeRecord,
+    SyntheticBatchReportRecord,
+    SyntheticFeatureSnapshotRecord,
+    SyntheticMarketSampleRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +67,52 @@ class ResearchPersistence:
         )
         self._write(record, merge=True)
 
+    def save_synthetic_market_sample(self, sample: SyntheticMarketSample) -> None:
+        if not self._session_factory:
+            return
+        record = SyntheticMarketSampleRecord(
+            id=sample.sample_id,
+            market_id=sample.market_id,
+            source=sample.source,
+            asset=sample.asset,
+            timeframe=sample.timeframe,
+            market_open_time=sample.market_open_time,
+            market_close_time=sample.market_close_time,
+            decision_time=sample.decision_time,
+            source_provider=sample.source_provider,
+            payload=sample.model_dump(mode="json"),
+        )
+        self._write(record, merge=True)
+
+    def save_synthetic_feature_snapshot(self, snapshot: SyntheticFeatureSnapshot) -> None:
+        if not self._session_factory:
+            return
+        record = SyntheticFeatureSnapshotRecord(
+            id=f"{snapshot.sample_id}:{snapshot.decision_time.isoformat()}",
+            sample_id=snapshot.sample_id,
+            market_id=snapshot.market_id,
+            decision_time=snapshot.decision_time,
+            payload=snapshot.model_dump(mode="json"),
+        )
+        self._write(record, merge=True)
+
+    def save_synthetic_batch_report(self, report: SyntheticBatchReport) -> None:
+        if not self._session_factory:
+            return
+        record = SyntheticBatchReportRecord(
+            id=report.run_id,
+            strategy_name=report.strategy_name,
+            source=report.source,
+            asset_filter=report.asset_filter,
+            timeframe_filter=report.timeframe_filter,
+            decision_time=report.decision_time,
+            total_samples=report.total_samples,
+            metrics=[metric.model_dump(mode="json") for metric in report.metrics],
+            coverage=report.coverage,
+            records=[record.model_dump(mode="json") for record in report.records],
+        )
+        self._write(record, merge=True)
+
     def save_paper_decision(self, decision: PaperTradeDecision, is_dry_run: bool = True) -> None:
         if not self._session_factory:
             return
@@ -90,6 +143,28 @@ class ResearchPersistence:
                 trade_count=row.trade_count,
                 decisions=row.decisions,
                 notes=row.notes,
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
+
+    def list_synthetic_batch_reports(self) -> list[SyntheticBatchReport]:
+        if not self._session_factory:
+            return []
+        with self._session_factory() as session:
+            rows = session.query(SyntheticBatchReportRecord).order_by(SyntheticBatchReportRecord.created_at.desc()).all()
+        return [
+            SyntheticBatchReport(
+                run_id=row.id,
+                strategy_name=row.strategy_name,
+                source=row.source,
+                asset_filter=row.asset_filter,
+                timeframe_filter=row.timeframe_filter,
+                decision_time=row.decision_time,
+                total_samples=row.total_samples,
+                metrics=[BacktestMetric(**metric) for metric in row.metrics],
+                coverage=row.coverage,
+                records=[SyntheticEvaluationRecord(**record) for record in row.records],
                 created_at=row.created_at,
             )
             for row in rows

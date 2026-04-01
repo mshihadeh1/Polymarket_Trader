@@ -232,6 +232,26 @@ Startup validation reports:
 - duplicate count
 - schema issues
 
+## Synthetic Research Workflow
+
+This is the first-class Layer 1 workflow. It turns the local 1-minute CSV history into cached BTC up/down samples and scores a small strategy family set before comparing the same logic against real closed-market validation.
+
+Open:
+
+- [http://localhost:3000/research/btc-updown](http://localhost:3000/research/btc-updown)
+- [http://localhost:8000/api/v1/research/synthetic/samples](http://localhost:8000/api/v1/research/synthetic/samples)
+- [http://localhost:8000/api/v1/research/synthetic/results](http://localhost:8000/api/v1/research/synthetic/results)
+
+What this does today:
+- generates aligned synthetic BTC 5m and 15m samples from 1-minute bars
+- computes point-in-time features at open and optional checkpoints
+- runs momentum, mean-reversion, breakout, and regime-filter strategy families
+- caches results so the page can read stored reports instead of recomputing everything
+- scores the same feature pipeline on recent real closed BTC 5m/15m markets as validation
+
+Truthful limitation:
+- this is a bar-based research engine, not a historical Polymarket trade replay engine
+
 You can inspect this through:
 - `GET /api/v1/external-provider`
 - `GET /api/v1/system/health`
@@ -489,12 +509,17 @@ To hydrate known closed BTC 5m / 15m markets directly by slug or market id:
 curl -X POST "http://localhost:8000/api/v1/ingestion/hydrate-closed-markets?identifiers=btc-updown-5m-1775039700&identifiers=btc-updown-15m-1775039400"
 ```
 
-7. Open [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) to inspect:
+7. Open [http://localhost:3000/research/btc-updown](http://localhost:3000/research/btc-updown) to inspect:
+- cached synthetic BTC samples
+- run controls for asset, timeframe, strategy, and date range
+- synthetic versus real-validation report summaries
+
+8. Open [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) if you want the existing closed-market comparison view:
 - eligible closed markets
-- bars-only vs bars-plus-Hyperliquid comparison
+- bars-only versus bars-plus-Hyperliquid comparison
 - coverage and missing-data notes
 
-8. For open markets, switch to real observation mode with `./scripts/run-real-observation.sh` or `./scripts/run-real-observation.ps1` and use the same feature stack through the dashboard and market detail pages.
+9. For open markets, switch to real observation mode with `./scripts/run-real-observation.sh` or `./scripts/run-real-observation.ps1` and use the same feature stack through the dashboard and market detail pages.
 
 ## API Surface
 
@@ -511,6 +536,13 @@ curl -X POST "http://localhost:8000/api/v1/ingestion/hydrate-closed-markets?iden
 - `POST /api/v1/backtests/{market_id}`
 - `GET /api/v1/backtests`
 - `GET /api/v1/backtests/{run_id}`
+- `GET /api/v1/research/strategies`
+- `GET /api/v1/research/synthetic/samples`
+- `POST /api/v1/research/synthetic/build`
+- `POST /api/v1/research/synthetic/run`
+- `GET /api/v1/research/synthetic/results`
+- `POST /api/v1/research/validation/run`
+- `GET /api/v1/research/validation/results`
 - `GET /api/v1/evaluations/closed-markets`
 - `POST /api/v1/evaluations/closed-markets/run`
 - `GET /api/v1/evaluations/results`
