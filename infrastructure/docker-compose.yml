@@ -45,6 +45,8 @@ services:
       NEXT_PUBLIC_API_BASE_URL: http://api:8000
     volumes:
       - ../apps/web:/app/apps/web
+      - web_node_modules:/app/apps/web/node_modules
+      - web_next_cache:/app/apps/web/.next
     depends_on:
       - api
     ports:
@@ -52,3 +54,5 @@ services:
 
 volumes:
   postgres_data:
+  web_node_modules:
+  web_next_cache:
