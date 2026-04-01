@@ -69,6 +69,57 @@ class BacktesterService:
             reverse=True,
         )
 
+    async def _closed_market_candidates(self, *, limit: int) -> list[tuple[dict, PolymarketMarketMetadata]]:
+        closed_markets = [
+            market
+            for market in self._state.markets.values()
+            if market.market_type in {"crypto_5m", "crypto_15m"} and (market.status == "closed" or market.resolved_outcome != "unknown")
+        ]
+        if closed_markets:
+            candidates = []
+            for market in closed_markets[:limit]:
+                raw_market = {
+                    "id": str(market.id),
+                    "slug": market.slug,
+                    "price_to_beat": market.price_to_beat,
+                    "open_reference_price": market.open_reference_price,
+                    "resolved_outcome": market.resolved_outcome,
+                    "resolution_price": market.resolution_price,
+                }
+                metadata = PolymarketMarketMetadata(
+                    market_id=str(market.id),
+                    condition_id="",
+                    slug=market.slug,
+                    question=market.title,
+                    category=market.category,
+                    market_family=market.market_family,
+                    event_slug=market.event_slug,
+                    event_epoch=market.event_epoch,
+                    duration_minutes=market.duration_minutes,
+                    active=market.status == "active",
+                    closed=market.status == "closed",
+                    accepting_orders=market.status == "active",
+                    enable_order_book=True,
+                    start_date=market.opens_at,
+                    end_date=market.closes_at,
+                    resolution_source=None,
+                    description=None,
+                    price_to_beat=market.price_to_beat,
+                    resolved_outcome=market.resolved_outcome,
+                    resolution_price=market.resolution_price,
+                    outcomes=[token.outcome for token in market.tokens],
+                    outcome_prices=[],
+                    token_ids=[token.token_id for token in market.tokens],
+                    best_bid=None,
+                    best_ask=None,
+                    last_trade_price=None,
+                    raw_tags=market.tags,
+                )
+                candidates.append((raw_market, metadata))
+            return candidates
+        raw_markets, normalized = await self._polymarket_client.discover_markets(closed=True, limit=limit)
+        return list(zip(raw_markets, normalized, strict=False))
+
     def run_baseline(self, market_id: str, strategy_name: str = "no_trade_baseline") -> BacktestReport:
         market = self._state.markets.get(market_id)
         if market is None:
@@ -95,9 +146,15 @@ class BacktesterService:
         timeframe: str | None = None,
         limit: int = 50,
     ) -> list[dict]:
-        closed_markets = await self._discover_short_horizon_closed_markets(asset=asset, timeframe=timeframe, limit=limit)
         eligible = []
-        for raw_market, metadata, market_type, underlying in closed_markets:
+        for raw_market, metadata in await self._closed_market_candidates(limit=max(limit * 3, 100)):
+            market_type, underlying = classify_polymarket_market(metadata)
+            if market_type not in {"crypto_5m", "crypto_15m"}:
+                continue
+            if asset is not None and (underlying or "").upper() != asset.upper():
+                continue
+            if timeframe is not None and market_type != timeframe:
+                continue
             if metadata.start_date is None or metadata.end_date is None:
                 continue
             eligible.append(
@@ -153,14 +210,20 @@ class BacktesterService:
         include_hyperliquid_enrichment: bool,
     ) -> ClosedMarketBatchReport:
         strategy = self._strategy_registry[strategy_name]
-        closed_markets = await self._discover_short_horizon_closed_markets(asset=asset, timeframe=timeframe, limit=limit)
         records: list[ClosedMarketEvaluationRecord] = []
         coverage = {
             "bars_only": 0,
             "bars_plus_trades": 0,
             "bars_plus_trades_plus_orderbook": 0,
         }
-        for raw_market, metadata, market_type, underlying in closed_markets:
+        for raw_market, metadata in await self._closed_market_candidates(limit=max(limit * 3, 100)):
+            market_type, underlying = classify_polymarket_market(metadata)
+            if market_type not in {"crypto_5m", "crypto_15m"}:
+                continue
+            if asset is not None and (underlying or "").upper() != asset.upper():
+                continue
+            if timeframe is not None and market_type != timeframe:
+                continue
             if metadata.start_date is None or metadata.end_date is None or underlying is None:
                 continue
             record = self._evaluate_closed_market(
@@ -374,7 +437,7 @@ class BacktesterService:
         if not decision_timeline:
             return None
         final_ts, final_snapshot, final_decision = decision_timeline[-1]
-        actual_resolution, resolution_source, resolution_price = _resolve_actual_outcome(raw_market, strike_price, bars, metadata.end_date)
+        actual_resolution, resolution_source, resolution_price = _resolve_actual_outcome(metadata, raw_market, strike_price, bars, metadata.end_date)
         correctness = None
         if final_decision.decision in {"buy_yes", "passive_yes"}:
             correctness = actual_resolution == "yes"
@@ -666,7 +729,9 @@ def _extract_open_reference(raw_market: dict, metadata) -> float | None:
     return metadata.last_trade_price
 
 
-def _resolve_actual_outcome(raw_market: dict, strike_price: float | None, bars, market_close: datetime):
+def _resolve_actual_outcome(metadata, raw_market: dict, strike_price: float | None, bars, market_close: datetime):
+    if getattr(metadata, "resolved_outcome", "unknown") in {"yes", "no"}:
+        return metadata.resolved_outcome, "polymarket:resolved_outcome", getattr(metadata, "resolution_price", None)
     for key, winner in (("winner", raw_market.get("winner")), ("outcome", raw_market.get("outcome"))):
         if isinstance(winner, str):
             lowered = winner.lower()

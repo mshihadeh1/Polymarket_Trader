@@ -28,12 +28,18 @@ class MarketSummary(BaseModel):
     category: str
     market_type: str
     underlying: str | None = None
+    market_family: str | None = None
+    event_slug: str | None = None
+    event_epoch: int | None = None
+    duration_minutes: int | None = None
     status: str
     opens_at: datetime | None = None
     closes_at: datetime | None = None
     resolves_at: datetime | None = None
     price_to_beat: float | None = None
     open_reference_price: float | None = None
+    resolved_outcome: Literal["yes", "no", "unknown"] = "unknown"
+    resolution_price: float | None = None
     external_provider: str | None = None
     source: str | None = None
     tags: list[str] = Field(default_factory=list)
@@ -145,6 +151,10 @@ class PolymarketMarketMetadata(BaseModel):
     slug: str | None = None
     question: str | None = None
     category: str | None = None
+    market_family: str | None = None
+    event_slug: str | None = None
+    event_epoch: int | None = None
+    duration_minutes: int | None = None
     active: bool = False
     closed: bool = False
     accepting_orders: bool = False
@@ -153,6 +163,9 @@ class PolymarketMarketMetadata(BaseModel):
     end_date: datetime | None = None
     resolution_source: str | None = None
     description: str | None = None
+    price_to_beat: float | None = None
+    resolved_outcome: Literal["yes", "no", "unknown"] = "unknown"
+    resolution_price: float | None = None
     outcomes: list[str] = Field(default_factory=list)
     outcome_prices: list[float] = Field(default_factory=list)
     token_ids: list[str] = Field(default_factory=list)

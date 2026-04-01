@@ -13,6 +13,7 @@ import websockets
 from packages.clients.polymarket_client.base import PolymarketClient
 from packages.core_types.schemas import PolymarketMarketMetadata, RawPolymarketEvent
 from packages.utils.time import parse_dt
+from services.market_catalog.short_horizon import normalize_short_horizon_market
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,25 @@ class RealPolymarketClient(PolymarketClient):
     async def discover_active_markets(self) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
         return await self.discover_markets(closed=False, active=True)
 
+    async def fetch_market_by_identifier(self, identifier: str) -> tuple[dict[str, Any], PolymarketMarketMetadata] | None:
+        normalized_identifier = identifier.lower()
+        try:
+            response = await self._http_client.get(f"{self._api_base_url}/markets/{identifier}")
+            if response.is_success:
+                payload = response.json()
+                if isinstance(payload, dict) and payload.get("id"):
+                    metadata = self._normalize_market_payload(payload)
+                    return payload, metadata
+        except Exception:
+            logger.debug("Direct Polymarket market lookup failed for identifier=%s", identifier, exc_info=True)
+
+        discovery = await self.discover_markets(limit=500)
+        raw_markets, normalized_markets = discovery
+        for raw_market, metadata in zip(raw_markets, normalized_markets, strict=False):
+            if metadata.market_id.lower() == normalized_identifier or (metadata.slug or "").lower() == normalized_identifier:
+                return raw_market, metadata
+        return None
+
     async def stream_market_events(
         self,
         asset_ids: list[str],
@@ -148,12 +168,16 @@ class RealPolymarketClient(PolymarketClient):
         token_ids = self._parse_json_list(payload.get("clobTokenIds"))
         outcomes = self._parse_json_list(payload.get("outcomes"))
         outcome_prices = self._parse_json_list(payload.get("outcomePrices"))
-        return PolymarketMarketMetadata(
+        metadata = PolymarketMarketMetadata(
             market_id=str(payload["id"]),
             condition_id=str(payload.get("conditionId", "")),
             slug=payload.get("slug"),
             question=payload.get("question"),
             category=payload.get("category"),
+            market_family=payload.get("market_family"),
+            event_slug=payload.get("event_slug") or payload.get("slug"),
+            event_epoch=_as_int(payload.get("event_epoch")),
+            duration_minutes=_as_int(payload.get("duration_minutes")),
             active=bool(payload.get("active")),
             closed=bool(payload.get("closed")),
             accepting_orders=bool(payload.get("acceptingOrders", payload.get("accepting_orders", False))),
@@ -162,6 +186,9 @@ class RealPolymarketClient(PolymarketClient):
             end_date=parse_dt(payload.get("endDate") or payload.get("endDateIso")),
             resolution_source=payload.get("resolutionSource"),
             description=payload.get("description"),
+            price_to_beat=_as_float(payload.get("price_to_beat") or payload.get("priceToBeat") or payload.get("open_reference_price")),
+            resolved_outcome=str(payload.get("resolved_outcome") or payload.get("winner") or payload.get("outcome") or "unknown").lower(),
+            resolution_price=_as_float(payload.get("resolution_price") or payload.get("final_price")),
             outcomes=outcomes,
             outcome_prices=[float(value) for value in outcome_prices if value is not None],
             token_ids=[str(token_id) for token_id in token_ids],
@@ -170,6 +197,7 @@ class RealPolymarketClient(PolymarketClient):
             last_trade_price=_as_float(payload.get("lastTradePrice")),
             raw_tags=[tag.get("slug", "") for tag in payload.get("tags", []) if isinstance(tag, dict)],
         )
+        return normalize_short_horizon_market(metadata, raw_market=payload)
 
     def _normalize_raw_event(self, payload: dict[str, Any]) -> RawPolymarketEvent:
         timestamp_ms = payload.get("timestamp")
@@ -207,5 +235,14 @@ def _as_float(value: Any) -> float | None:
         return None
     try:
         return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(float(value))
     except (TypeError, ValueError):
         return None

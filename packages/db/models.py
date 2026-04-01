@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, JSON, String
+from sqlalchemy import Boolean, DateTime, Float, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.db.schema import Base
@@ -57,9 +57,16 @@ class PolymarketMarketRecord(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     slug: Mapped[str | None] = mapped_column(String)
+    event_slug: Mapped[str | None] = mapped_column(String)
+    event_epoch: Mapped[int | None] = mapped_column(Integer)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer)
     market_type: Mapped[str] = mapped_column(String, nullable=False)
     underlying: Mapped[str | None] = mapped_column(String)
+    market_family: Mapped[str | None] = mapped_column(String)
     source: Mapped[str] = mapped_column(String, nullable=False)
+    price_to_beat: Mapped[float | None] = mapped_column(Float)
+    resolved_outcome: Mapped[str] = mapped_column(String, default="unknown", nullable=False)
+    resolution_price: Mapped[float | None] = mapped_column(Float)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
 
