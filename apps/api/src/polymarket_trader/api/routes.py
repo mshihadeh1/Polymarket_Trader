@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from polymarket_trader.bootstrap import Container
+from packages.utils.time import parse_dt
 
 
 def build_router(container: Container) -> APIRouter:
@@ -83,6 +84,92 @@ def build_router(container: Container) -> APIRouter:
     @router.get("/strategies")
     def list_strategies():
         return container.backtester.list_strategies()
+
+    @router.get("/research/strategies")
+    def list_research_strategies():
+        return container.synthetic_research.list_strategies()
+
+    @router.get("/research/synthetic/samples")
+    def list_synthetic_samples(
+        asset: str | None = Query(default=None),
+        timeframe: str | None = Query(default=None),
+        limit: int = Query(default=100),
+        start: str | None = Query(default=None),
+        end: str | None = Query(default=None),
+    ):
+        return container.synthetic_research.list_samples(
+            asset=asset,
+            timeframe=timeframe,
+            limit=limit,
+            start=parse_dt(start) if start else None,
+            end=parse_dt(end) if end else None,
+        )
+
+    @router.post("/research/synthetic/build")
+    def build_synthetic_samples(
+        asset: str | None = Query(default=None),
+        timeframe: str | None = Query(default=None),
+        start: str | None = Query(default=None),
+        end: str | None = Query(default=None),
+    ):
+        return container.synthetic_research.build_synthetic_dataset(
+            asset=asset,
+            timeframe=timeframe,
+            start=parse_dt(start) if start else None,
+            end=parse_dt(end) if end else None,
+        )
+
+    @router.post("/research/synthetic/run")
+    def run_synthetic_batch(
+        asset: str | None = Query(default=None),
+        timeframe: str | None = Query(default=None),
+        strategy_name: str = Query(default="synthetic_momentum"),
+        decision_time: str = Query(default="open"),
+        limit: int = Query(default=200),
+        start: str | None = Query(default=None),
+        end: str | None = Query(default=None),
+    ):
+        try:
+            return container.synthetic_research.run_synthetic_batch(
+                asset=asset,
+                timeframe=timeframe,
+                strategy_name=strategy_name,
+                decision_time=decision_time,
+                limit=limit,
+                start=parse_dt(start) if start else None,
+                end=parse_dt(end) if end else None,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @router.get("/research/synthetic/results")
+    def list_synthetic_results():
+        return container.synthetic_research.list_reports(source="synthetic")
+
+    @router.post("/research/validation/run")
+    def run_real_validation_batch(
+        asset: str | None = Query(default="BTC"),
+        timeframe: str | None = Query(default=None),
+        strategy_name: str = Query(default="synthetic_momentum"),
+        limit: int = Query(default=50),
+        start: str | None = Query(default=None),
+        end: str | None = Query(default=None),
+    ):
+        try:
+            return container.synthetic_research.run_real_validation_batch(
+                asset=asset,
+                timeframe=timeframe,
+                strategy_name=strategy_name,
+                limit=limit,
+                start=parse_dt(start) if start else None,
+                end=parse_dt(end) if end else None,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @router.get("/research/validation/results")
+    def list_validation_results():
+        return container.synthetic_research.list_reports(source="real_validation")
 
     @router.get("/external-provider")
     def get_external_provider():

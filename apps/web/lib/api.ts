@@ -132,6 +132,62 @@ export type ClosedMarketBatchReport = {
   records: ClosedMarketEvaluationRecord[];
 };
 
+export type SyntheticMarketSample = {
+  sample_id: string;
+  market_id?: string | null;
+  source: "synthetic" | "real_validation";
+  asset: string;
+  timeframe: string;
+  market_open_time: string;
+  market_close_time: string;
+  decision_time: string;
+  decision_horizon_minutes: number;
+  price_to_beat: number;
+  close_price: number;
+  actual_resolution: "yes" | "no" | "unknown";
+  source_provider: string;
+  window_index: number;
+  notes: string[];
+};
+
+export type SyntheticEvaluationRecord = {
+  sample_id: string;
+  market_id?: string | null;
+  source: "synthetic" | "real_validation";
+  asset: string;
+  timeframe: string;
+  market_open_time: string;
+  market_close_time: string;
+  decision_time: string;
+  price_to_beat: number;
+  close_price: number;
+  actual_resolution: "yes" | "no" | "unknown";
+  actual_resolution_source?: string | null;
+  strategy_name: string;
+  signal_value: number;
+  confidence: number;
+  decision: string;
+  correctness?: boolean | null;
+  contract_score: number;
+  feature_snapshot_summary: Record<string, number | string | null>;
+  notes: string[];
+};
+
+export type SyntheticBatchReport = {
+  run_id: string;
+  strategy_name: string;
+  source: "synthetic" | "real_validation";
+  asset_filter?: string;
+  timeframe_filter?: string;
+  decision_time: string;
+  limit: number;
+  created_at?: string;
+  total_samples: number;
+  metrics: { label: string; value: number }[];
+  coverage: Record<string, number>;
+  records: SyntheticEvaluationRecord[];
+};
+
 export type PaperStatus = {
   strategy_name: string;
   dry_run_only: boolean;
@@ -384,6 +440,105 @@ export async function fetchStrategies(): Promise<Strategy[]> {
   const response = await fetch(`${baseUrl}/api/v1/strategies`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Failed to fetch strategies");
+  }
+  return response.json();
+}
+
+export async function fetchResearchStrategies(): Promise<Strategy[]> {
+  const response = await fetch(`${baseUrl}/api/v1/research/strategies`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch research strategies");
+  }
+  return response.json();
+}
+
+export async function fetchSyntheticSamples(asset?: string, timeframe?: string, limit = 100, start?: string, end?: string): Promise<SyntheticMarketSample[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (asset) params.set("asset", asset);
+  if (timeframe) params.set("timeframe", timeframe);
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const response = await fetch(`${baseUrl}/api/v1/research/synthetic/samples?${params.toString()}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch synthetic samples");
+  }
+  return response.json();
+}
+
+export async function buildSyntheticSamples(asset?: string, timeframe?: string, start?: string, end?: string): Promise<SyntheticMarketSample[]> {
+  const params = new URLSearchParams();
+  if (asset) params.set("asset", asset);
+  if (timeframe) params.set("timeframe", timeframe);
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const response = await fetch(`${baseUrl}/api/v1/research/synthetic/build?${params.toString()}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to build synthetic samples");
+  }
+  return response.json();
+}
+
+export async function runSyntheticBatch(
+  asset?: string,
+  timeframe?: string,
+  strategyName = "synthetic_momentum",
+  decisionTime = "open",
+  limit = 200,
+  start?: string,
+  end?: string,
+): Promise<SyntheticBatchReport> {
+  const params = new URLSearchParams({ strategy_name: strategyName, decision_time: decisionTime, limit: String(limit) });
+  if (asset) params.set("asset", asset);
+  if (timeframe) params.set("timeframe", timeframe);
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const response = await fetch(`${baseUrl}/api/v1/research/synthetic/run?${params.toString()}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to run synthetic batch");
+  }
+  return response.json();
+}
+
+export async function fetchSyntheticResults(): Promise<SyntheticBatchReport[]> {
+  const response = await fetch(`${baseUrl}/api/v1/research/synthetic/results`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch synthetic results");
+  }
+  return response.json();
+}
+
+export async function runRealValidationBatch(
+  asset = "BTC",
+  timeframe?: string,
+  strategyName = "synthetic_momentum",
+  limit = 50,
+  start?: string,
+  end?: string,
+): Promise<SyntheticBatchReport> {
+  const params = new URLSearchParams({ asset, strategy_name: strategyName, limit: String(limit) });
+  if (timeframe) params.set("timeframe", timeframe);
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const response = await fetch(`${baseUrl}/api/v1/research/validation/run?${params.toString()}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to run real validation batch");
+  }
+  return response.json();
+}
+
+export async function fetchValidationResults(): Promise<SyntheticBatchReport[]> {
+  const response = await fetch(`${baseUrl}/api/v1/research/validation/results`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to fetch validation results");
   }
   return response.json();
 }

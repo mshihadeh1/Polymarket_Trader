@@ -22,6 +22,7 @@ export default function RootLayout({
               </div>
               <nav className="app-nav" aria-label="Primary">
                 <Link className="nav-link" href="/">Dashboard</Link>
+                <Link className="nav-link" href="/research/btc-updown">Research</Link>
                 <Link className="nav-link" href="/backtests">Backtests</Link>
                 <Link className="nav-link" href="/paper-trading">Paper Trading</Link>
                 <Link className="nav-link" href="/replay">Replay</Link>

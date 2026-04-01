@@ -268,6 +268,89 @@ class FeatureAvailability(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class SyntheticMarketSample(BaseModel):
+    sample_id: str
+    market_id: str | None = None
+    source: Literal["synthetic", "real_validation"] = "synthetic"
+    asset: str
+    timeframe: str
+    market_open_time: datetime
+    market_close_time: datetime
+    decision_time: datetime
+    decision_horizon_minutes: int
+    price_to_beat: float
+    close_price: float
+    actual_resolution: Literal["yes", "no", "unknown"] = "unknown"
+    source_provider: str = "csv"
+    window_index: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+
+class SyntheticFeatureSnapshot(BaseModel):
+    sample_id: str
+    market_id: str | None = None
+    source: Literal["synthetic", "real_validation"] = "synthetic"
+    asset: str
+    timeframe: str
+    market_open_time: datetime
+    market_close_time: datetime
+    decision_time: datetime
+    checkpoint_minutes: int = 0
+    current_price: float | None = None
+    rolling_mean_price: float | None = None
+    prior_return_1m: float | None = None
+    prior_return_3m: float | None = None
+    prior_return_5m: float | None = None
+    prior_return_15m: float | None = None
+    realized_vol_5m: float | None = None
+    realized_vol_15m: float | None = None
+    realized_vol_30m: float | None = None
+    distance_from_vwap: float | None = None
+    local_range_position: float | None = None
+    acceleration: float | None = None
+    trend_regime: str = "unknown"
+    time_of_day_bucket: str = "unknown"
+    feature_summary: dict[str, float | str | None] = Field(default_factory=dict)
+
+
+class SyntheticEvaluationRecord(BaseModel):
+    sample_id: str
+    market_id: str | None = None
+    source: Literal["synthetic", "real_validation"] = "synthetic"
+    asset: str
+    timeframe: str
+    market_open_time: datetime
+    market_close_time: datetime
+    decision_time: datetime
+    price_to_beat: float
+    close_price: float
+    actual_resolution: Literal["yes", "no", "unknown"] = "unknown"
+    actual_resolution_source: str | None = None
+    strategy_name: str
+    signal_value: float
+    confidence: float
+    decision: str
+    correctness: bool | None = None
+    contract_score: float = 0.0
+    feature_snapshot_summary: dict[str, float | str | None] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+
+class SyntheticBatchReport(BaseModel):
+    run_id: str
+    strategy_name: str
+    source: Literal["synthetic", "real_validation"] = "synthetic"
+    asset_filter: str | None = None
+    timeframe_filter: str | None = None
+    decision_time: str = "open"
+    limit: int = 0
+    created_at: datetime | None = None
+    total_samples: int = 0
+    metrics: list[BacktestMetric] = Field(default_factory=list)
+    coverage: dict[str, int] = Field(default_factory=dict)
+    records: list[SyntheticEvaluationRecord] = Field(default_factory=list)
+
+
 class MarketDetail(MarketSummary):
     rules: list[MarketRule] = Field(default_factory=list)
     latest_polymarket_orderbook: OrderBookSnapshot | None = None

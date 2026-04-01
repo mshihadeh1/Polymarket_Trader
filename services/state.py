@@ -12,6 +12,9 @@ from packages.core_types.schemas import (
     MarketSummary,
     OrderBookSnapshot,
     PaperTradeDecision,
+    SyntheticBatchReport,
+    SyntheticFeatureSnapshot,
+    SyntheticMarketSample,
     PolymarketTopOfBook,
     PolymarketTrade,
     PolymarketObservationStatus,
@@ -37,6 +40,9 @@ class InMemoryState:
     external_dataset_validation: dict[str, DatasetValidationReport] = field(default_factory=dict)
     external_feature_availability: dict[str, dict] = field(default_factory=dict)
     feature_snapshots: dict[str, list[FeatureSnapshot]] = field(default_factory=dict)
+    synthetic_market_samples: dict[str, SyntheticMarketSample] = field(default_factory=dict)
+    synthetic_feature_snapshots: dict[str, list[SyntheticFeatureSnapshot]] = field(default_factory=dict)
+    synthetic_batch_reports: list[SyntheticBatchReport] = field(default_factory=list)
     backtest_reports: list[BacktestReport] = field(default_factory=list)
     closed_market_batch_reports: list[ClosedMarketBatchReport] = field(default_factory=list)
     paper_decisions: list[PaperTradeDecision] = field(default_factory=list)
