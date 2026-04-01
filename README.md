@@ -143,7 +143,7 @@ Use:
 EXTERNAL_HISTORICAL_PROVIDER=csv
 USE_MOCK_EXTERNAL_PROVIDER=false
 CSV_BTC_PATH=data/datasets/BTCUSD-1m-104wks-data.csv
-CSV_ETH_PATH=
+CSV_ETH_PATH=data/datasets/ETHUSD-1m-104wks-data.csv
 CSV_SOL_PATH=data/datasets/SOLUSD-1m-104wks-data.csv
 USE_MOCK_HYPERLIQUID_RECENT=false
 PAPER_TRADING_LOOP_ENABLED=false
@@ -214,15 +214,14 @@ Example config:
 EXTERNAL_HISTORICAL_PROVIDER=csv
 USE_MOCK_EXTERNAL_PROVIDER=false
 CSV_BTC_PATH=data/datasets/BTCUSD-1m-104wks-data.csv
-CSV_ETH_PATH=
+CSV_ETH_PATH=data/datasets/ETHUSD-1m-104wks-data.csv
 CSV_SOL_PATH=data/datasets/SOLUSD-1m-104wks-data.csv
 EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}
 ```
 
-If you have a local ETH file, set `CSV_ETH_PATH` to that file before starting the stack.
-
 The repo now includes these local 1-minute datasets:
 - `data/datasets/BTCUSD-1m-104wks-data.csv`
+- `data/datasets/ETHUSD-1m-104wks-data.csv`
 - `data/datasets/SOLUSD-1m-104wks-data.csv`
 
 Startup validation reports:
