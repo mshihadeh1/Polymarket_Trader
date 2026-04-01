@@ -101,9 +101,16 @@ class ResearchPersistence:
         record = PolymarketMarketRecord(
             id=str(market.id),
             slug=market.slug,
+            event_slug=market.event_slug,
+            event_epoch=market.event_epoch,
+            duration_minutes=market.duration_minutes,
             market_type=market.market_type,
             underlying=market.underlying,
+            market_family=market.market_family,
             source=market.source or "unknown",
+            price_to_beat=market.price_to_beat,
+            resolved_outcome=market.resolved_outcome,
+            resolution_price=market.resolution_price,
             payload=market.model_dump(mode="json"),
         )
         self._write(record, merge=True)

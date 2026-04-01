@@ -23,6 +23,7 @@ from packages.core_types.schemas import (
 )
 from packages.utils.time import parse_dt
 from services.market_catalog.classifier import classify_polymarket_market
+from services.market_catalog.short_horizon import normalize_short_horizon_market
 from services.state import InMemoryState
 
 logger = logging.getLogger(__name__)
@@ -60,43 +61,10 @@ class PolymarketIngestorService:
             market_type, underlying = classify_polymarket_market(metadata)
             if market_type not in {"crypto_5m", "crypto_15m"}:
                 continue
-            summary = self._build_market_summary(
-                metadata,
-                raw_market=raw_market,
-                market_type=market_type,
-                underlying=underlying,
-            )
-            market_id = str(summary.id)
-            orderbooks = self._seed_orderbooks(raw_market, underlying)
-            trades = self._seed_trades(raw_market, underlying)
-            raw_event_payloads = raw_market.get("raw_events", []) if isinstance(raw_market, dict) else []
-            detail = MarketDetail(
-                **summary.model_dump(),
-                rules=[
-                    MarketRule(
-                        rule_type="resolution",
-                        source=metadata.resolution_source,
-                        text=metadata.description or "",
-                        normalized={"source": metadata.resolution_source},
-                    )
-                ],
-                latest_polymarket_orderbook=orderbooks[-1] if orderbooks else self._initial_orderbook(metadata),
-                recent_polymarket_trades=trades[-20:],
-                external_context=ExternalContext(symbol=summary.underlying or "UNKNOWN"),
-            )
-            self._state.markets[market_id] = summary
-            self._state.market_details[market_id] = detail
-            self._state.polymarket_orderbooks[market_id] = orderbooks
-            self._state.polymarket_trades[market_id] = trades
-            self._state.polymarket_raw_events[market_id] = raw_event_payloads
-            self._state.polymarket_top_of_book.setdefault(market_id, [])
-            self._state.polymarket_trade_events.setdefault(market_id, [])
-            self._state.polymarket_raw_envelopes.setdefault(market_id, [])
+            summary = self._store_market_record(raw_market=raw_market, metadata=metadata, market_type=market_type, underlying=underlying)
             for token in summary.tokens:
-                self._asset_to_market[token.token_id] = market_id
+                self._asset_to_market[token.token_id] = str(summary.id)
                 selected_asset_ids.append(token.token_id)
-            if self._persistence is not None:
-                self._persistence.save_market_summary(summary)
             count += 1
         self._state.polymarket_observation.source_mode = self.data_source
         self._state.polymarket_observation.selected_market_count = count
@@ -105,6 +73,31 @@ class PolymarketIngestorService:
         self._state.polymarket_observation.last_error = None
         logger.info("Polymarket discovery returned %s selected short-horizon markets", count)
         logger.info("Selected %s Polymarket asset ids for live observation", len(selected_asset_ids))
+        return count
+
+    async def hydrate_closed_markets(self, identifiers: list[str] | None = None, limit: int = 50) -> int:
+        candidates: list[tuple[dict[str, object], PolymarketMarketMetadata]] = []
+        if identifiers:
+            for identifier in identifiers:
+                fetched = await self._client.fetch_market_by_identifier(identifier)
+                if fetched is not None:
+                    candidates.append(fetched)
+        else:
+            raw_markets, normalized_markets = await self._client.discover_markets(closed=True, limit=limit)
+            candidates.extend(zip(raw_markets, normalized_markets, strict=False))
+
+        count = 0
+        seen_market_ids: set[str] = set()
+        for raw_market, metadata in candidates:
+            market_type, underlying = classify_polymarket_market(metadata)
+            if market_type not in {"crypto_5m", "crypto_15m"} or underlying is None:
+                continue
+            summary = self._store_market_record(raw_market=raw_market, metadata=normalize_short_horizon_market(metadata, raw_market=raw_market), market_type=market_type, underlying=underlying)
+            market_id = str(summary.id)
+            if summary.status == "closed" and market_id not in seen_market_ids:
+                count += 1
+                seen_market_ids.add(market_id)
+        logger.info("Hydrated %s closed short-horizon Polymarket markets", count)
         return count
 
     async def start_live_ingestion(self) -> None:
@@ -241,17 +234,72 @@ class PolymarketIngestorService:
             category=metadata.category or "crypto",
             market_type=market_type,
             underlying=underlying,
-            status="active" if metadata.active else "inactive",
+            market_family=metadata.market_family,
+            event_slug=metadata.event_slug or metadata.slug,
+            event_epoch=metadata.event_epoch,
+            duration_minutes=metadata.duration_minutes,
+            status="closed" if metadata.closed else ("active" if metadata.active else "inactive"),
             opens_at=metadata.start_date,
             closes_at=metadata.end_date,
             resolves_at=metadata.end_date,
             price_to_beat=_coerce_float(raw_market.get("price_to_beat")) or _extract_price_to_beat(metadata.question or metadata.slug or ""),
             open_reference_price=_coerce_float(raw_market.get("open_reference_price")),
+            resolved_outcome=metadata.resolved_outcome,
+            resolution_price=metadata.resolution_price,
             external_provider=None,
             source=self.data_source,
             tags=[market_type, underlying.lower() if underlying else "unknown"],
             tokens=tokens,
         )
+
+    def _store_market_record(
+        self,
+        *,
+        raw_market: dict[str, object],
+        metadata: PolymarketMarketMetadata,
+        market_type: str,
+        underlying: str | None,
+    ) -> MarketSummary:
+        summary = self._build_market_summary(
+            metadata,
+            raw_market=raw_market,
+            market_type=market_type,
+            underlying=underlying,
+        )
+        market_id = str(summary.id)
+        orderbooks = self._seed_orderbooks(raw_market, underlying)
+        trades = self._seed_trades(raw_market, underlying)
+        raw_event_payloads = raw_market.get("raw_events", []) if isinstance(raw_market, dict) else []
+        detail = MarketDetail(
+            **summary.model_dump(),
+            rules=[
+                MarketRule(
+                    rule_type="resolution",
+                    source=metadata.resolution_source,
+                    text=metadata.description or "",
+                    normalized={
+                        "source": metadata.resolution_source,
+                        "event_slug": metadata.event_slug or metadata.slug,
+                        "event_epoch": metadata.event_epoch,
+                        "duration_minutes": metadata.duration_minutes,
+                    },
+                )
+            ],
+            latest_polymarket_orderbook=orderbooks[-1] if orderbooks else self._initial_orderbook(metadata),
+            recent_polymarket_trades=trades[-20:],
+            external_context=ExternalContext(symbol=summary.underlying or "UNKNOWN"),
+        )
+        self._state.markets[market_id] = summary
+        self._state.market_details[market_id] = detail
+        self._state.polymarket_orderbooks[market_id] = orderbooks
+        self._state.polymarket_trades[market_id] = trades
+        self._state.polymarket_raw_events[market_id] = raw_event_payloads
+        self._state.polymarket_top_of_book.setdefault(market_id, [])
+        self._state.polymarket_trade_events.setdefault(market_id, [])
+        self._state.polymarket_raw_envelopes.setdefault(market_id, [])
+        if self._persistence is not None:
+            self._persistence.save_market_summary(summary)
+        return summary
 
     def _initial_orderbook(self, metadata: PolymarketMarketMetadata) -> OrderBookSnapshot | None:
         if metadata.best_bid is None or metadata.best_ask is None:

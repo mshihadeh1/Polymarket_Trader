@@ -32,6 +32,17 @@ class PolymarketClient(ABC):
     async def discover_active_markets(self) -> tuple[list[dict[str, Any]], list[PolymarketMarketMetadata]]:
         raise NotImplementedError
 
+    async def fetch_market_by_identifier(self, identifier: str) -> tuple[dict[str, Any], PolymarketMarketMetadata] | None:
+        markets = await self.discover_markets(limit=500)
+        raw_markets, normalized_markets = markets
+        normalized_identifier = identifier.lower()
+        for raw_market, metadata in zip(raw_markets, normalized_markets, strict=False):
+            if metadata.market_id.lower() == normalized_identifier:
+                return raw_market, metadata
+            if (metadata.slug or "").lower() == normalized_identifier:
+                return raw_market, metadata
+        return None
+
     @abstractmethod
     async def stream_market_events(
         self,

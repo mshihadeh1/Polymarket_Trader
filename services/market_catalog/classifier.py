@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from packages.core_types.schemas import PolymarketMarketMetadata
+from services.market_catalog.short_horizon import parse_short_horizon_market
 
 _BTC_PATTERN = re.compile(r"\bbtc\b|bitcoin", re.IGNORECASE)
 _ETH_PATTERN = re.compile(r"\beth\b|ethereum", re.IGNORECASE)
@@ -12,6 +13,12 @@ _FIFTEEN_MIN_PATTERN = re.compile(r"\b15m\b|15-minute|15 minute", re.IGNORECASE)
 
 
 def classify_polymarket_market(metadata: PolymarketMarketMetadata) -> tuple[str, str | None]:
+    parsed = parse_short_horizon_market(metadata.slug or "", metadata.question or "", raw_market={})
+    if parsed.asset in {"BTC", "ETH", "SOL"} and parsed.duration_minutes == 5:
+        return "crypto_5m", parsed.asset
+    if parsed.asset in {"BTC", "ETH", "SOL"} and parsed.duration_minutes == 15:
+        return "crypto_15m", parsed.asset
+
     text = " ".join(filter(None, [metadata.question, metadata.slug or "", metadata.description or ""]))
     underlying = None
     if _BTC_PATTERN.search(text):

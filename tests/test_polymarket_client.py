@@ -34,6 +34,9 @@ def test_real_client_normalizes_market_payload() -> None:
     assert normalized.token_ids == ["tok_yes", "tok_no"]
     assert normalized.best_bid == 0.48
     assert normalized.best_ask == 0.50
+    assert normalized.event_slug == "btc-5m-close-above-100000"
+    assert normalized.duration_minutes == 5
+    assert normalized.market_family == "btc_updown_5m"
 
 
 def test_real_client_normalizes_raw_ws_event() -> None:

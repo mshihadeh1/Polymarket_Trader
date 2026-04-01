@@ -75,6 +75,11 @@ def build_router(container: Container) -> APIRouter:
         count = container.bootstrap_seed_data_sync(force_reload=True)
         return {"markets_loaded": count}
 
+    @router.post("/ingestion/hydrate-closed-markets")
+    async def hydrate_closed_markets(identifiers: list[str] | None = Query(default=None), limit: int = Query(default=50)):
+        count = await container.polymarket_ingestor.hydrate_closed_markets(identifiers=identifiers, limit=limit)
+        return {"markets_hydrated": count, "identifiers": identifiers or [], "limit": limit}
+
     @router.get("/strategies")
     def list_strategies():
         return container.backtester.list_strategies()

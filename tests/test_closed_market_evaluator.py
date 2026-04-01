@@ -82,3 +82,48 @@ def test_closed_market_batch_evaluator_compares_bars_only_and_enriched_without_l
     assert bars_only.records[0].actual_resolution in {"yes", "no"}
     assert bars_only.records[0].enrichment_availability.trades_available is True
     assert enriched.records[0].feature_snapshot_summary["external_cvd"] == bars_only.records[0].feature_snapshot_summary["external_cvd"]
+
+
+def test_closed_market_resolution_prefers_polymarket_truth() -> None:
+    container = build_container(Settings())
+
+    raw_market = {
+        "id": "closed-btc-5m-2",
+        "slug": "btc-updown-5m-1775039400",
+        "price_to_beat": 84500.0,
+        "open_reference_price": 84440.0,
+        "resolved_outcome": "no",
+        "resolution_price": 84250.0,
+    }
+    metadata = PolymarketMarketMetadata(
+        market_id="closed-btc-5m-2",
+        condition_id="cond-2",
+        slug="btc-updown-5m-1775039400",
+        question="Will BTC 5m candle close above 84,500 at 11:55 UTC?",
+        category="crypto",
+        active=False,
+        closed=True,
+        start_date=datetime(2026, 3, 31, 11, 50, 0, tzinfo=timezone.utc),
+        end_date=datetime(2026, 3, 31, 11, 55, 0, tzinfo=timezone.utc),
+        resolution_source="polymarket",
+        resolved_outcome="no",
+        resolution_price=84250.0,
+    )
+
+    async def _discover_markets(*, closed=None, active=None, limit=None):
+        return [raw_market], [metadata]
+
+    container.backtester._polymarket_client.discover_markets = _discover_markets
+
+    result = asyncio.run(
+        container.backtester.run_closed_market_batch(
+            asset="BTC",
+            timeframe="crypto_5m",
+            limit=1,
+            strategy_name="combined_cvd_gap",
+            include_hyperliquid_enrichment=False,
+        )
+    )
+
+    assert result.records[0].actual_resolution == "no"
+    assert result.records[0].actual_resolution_source == "polymarket:resolved_outcome"

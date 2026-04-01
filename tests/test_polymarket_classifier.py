@@ -1,5 +1,6 @@
 from packages.core_types.schemas import PolymarketMarketMetadata
 from services.market_catalog.classifier import classify_polymarket_market
+from services.market_catalog.short_horizon import normalize_short_horizon_market
 
 
 def test_classifier_identifies_btc_5m_market() -> None:
@@ -14,6 +15,9 @@ def test_classifier_identifies_btc_5m_market() -> None:
     market_type, underlying = classify_polymarket_market(metadata)
     assert market_type == "crypto_5m"
     assert underlying == "BTC"
+    normalized = normalize_short_horizon_market(metadata)
+    assert normalized.market_family == "btc_updown_5m"
+    assert normalized.duration_minutes == 5
 
 
 def test_classifier_identifies_btc_15m_market() -> None:

@@ -483,6 +483,12 @@ For a baseline-only batch using the current bar-based evaluator:
 curl -X POST "http://localhost:8000/api/v1/evaluations/closed-markets/run?asset=BTC&timeframe=crypto_5m&limit=10&include_hyperliquid_enrichment=false"
 ```
 
+To hydrate known closed BTC 5m / 15m markets directly by slug or market id:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/ingestion/hydrate-closed-markets?identifiers=btc-updown-5m-1775039700&identifiers=btc-updown-15m-1775039400"
+```
+
 7. Open [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) to inspect:
 - eligible closed markets
 - bars-only vs bars-plus-Hyperliquid comparison
@@ -500,6 +506,7 @@ curl -X POST "http://localhost:8000/api/v1/evaluations/closed-markets/run?asset=
 - `GET /api/v1/markets/{market_id}/features`
 - `GET /api/v1/replay/{market_id}`
 - `POST /api/v1/ingestion/bootstrap`
+- `POST /api/v1/ingestion/hydrate-closed-markets`
 - `GET /api/v1/strategies`
 - `POST /api/v1/backtests/{market_id}`
 - `GET /api/v1/backtests`
