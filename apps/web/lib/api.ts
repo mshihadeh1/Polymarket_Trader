@@ -341,6 +341,27 @@ export async function fetchClosedMarketResults(): Promise<ClosedMarketBatchRepor
   return response.json();
 }
 
+export function findLatestClosedMarketReport(
+  reports: ClosedMarketBatchReport[],
+  {
+    mode,
+    asset,
+    timeframe,
+  }: {
+  mode: ClosedMarketBatchReport["mode"];
+  asset?: string;
+  timeframe?: string;
+}): ClosedMarketBatchReport | null {
+  const normalizedAsset = asset?.toUpperCase();
+  const filtered = reports.filter((report) => {
+    if (report.mode !== mode) return false;
+    if (normalizedAsset && (report.asset_filter ?? "").toUpperCase() !== normalizedAsset) return false;
+    if (timeframe && report.timeframe_filter !== timeframe) return false;
+    return true;
+  });
+  return filtered[0] ?? null;
+}
+
 export async function fetchLiveFeatureView(marketId: string): Promise<{
   market_id: string;
   market_type: string;

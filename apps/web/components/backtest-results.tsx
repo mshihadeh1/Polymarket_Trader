@@ -4,9 +4,8 @@ import {
   type ClosedMarketBatchReport,
   type ClosedMarketEvaluationRecord,
   fetchClosedMarketResults,
-  fetchClosedMarkets,
+  findLatestClosedMarketReport,
   fetchStrategies,
-  runClosedMarketComparison,
 } from "../lib/api";
 import { buildEdgeSlice, metricValue, type EdgeSlice } from "../lib/edge";
 import { formatLosAngelesDateTime, losAngelesTimeZoneLabel } from "../lib/time";
@@ -64,11 +63,24 @@ function confidenceBucket(confidence: number): string {
   return "low conviction";
 }
 
-function filterClosedMarkets(
-  markets: Awaited<ReturnType<typeof fetchClosedMarkets>>,
-  timeframe: "crypto_5m" | "crypto_15m",
-) {
-  return markets.filter((market) => market.timeframe === timeframe);
+function emptyBatchReport(mode: ClosedMarketBatchReport["mode"], asset: string): ClosedMarketBatchReport {
+  return {
+    run_id: `ui-empty-${mode}-${asset.toLowerCase()}`,
+    strategy_name: "combined_cvd_gap",
+    mode,
+    asset_filter: asset,
+    timeframe_filter: undefined,
+    limit: 0,
+    created_at: undefined,
+    total_markets_evaluated: 0,
+    metrics: [],
+    coverage: {
+      bars_only: 0,
+      bars_plus_trades: 0,
+      bars_plus_trades_plus_orderbook: 0,
+    },
+    records: [],
+  };
 }
 
 function renderEvidenceTable(
@@ -76,10 +88,7 @@ function renderEvidenceTable(
   subtitle: string,
   slice: EdgeSlice,
   baselineSlice: EdgeSlice,
-  fallbackMarkets: Awaited<ReturnType<typeof fetchClosedMarkets>>,
 ) {
-  const recentClosed = filterClosedMarkets(fallbackMarkets, slice.timeframe);
-
   return (
     <section className="panel span-2">
       <div className="section-head">
@@ -192,31 +201,10 @@ function renderEvidenceTable(
                   <td>{formatLosAngelesDateTime(record.market_close_time)}</td>
                 </tr>
               ))
-            ) : recentClosed.length ? (
-              recentClosed.map((market) => (
-                <tr key={market.market_id}>
-                  <td>
-                    <div className="market-title-cell">
-                      <span className="market-name">{market.title}</span>
-                      <div className="badge-stack">
-                        <span className="badge badge-type">{market.asset}</span>
-                        <span className="badge badge-provider">{market.timeframe}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td colSpan={5}>
-                    <span className="muted">
-                      Market is available in the closed-market list, but no evaluation record has been produced yet for this timeframe.
-                    </span>
-                  </td>
-                  <td>{market.strike_price?.toFixed(2) ?? "n/a"}</td>
-                  <td>{formatLosAngelesDateTime(market.market_close_time)}</td>
-                </tr>
-              ))
             ) : (
               <tr>
                 <td colSpan={8} className="muted">
-                  No closed BTC {slice.timeframe === "crypto_5m" ? "5 minute" : "15 minute"} markets are available yet. The edge board will become meaningful once the evaluator has real closed markets to score.
+                  No evaluated BTC {slice.timeframe === "crypto_5m" ? "5 minute" : "15 minute"} markets are available in stored results yet. Run or persist a comparison batch to populate this table.
                 </td>
               </tr>
             )}
@@ -286,19 +274,25 @@ export async function BacktestResults({
   const normalizedAsset = asset?.toUpperCase() ?? "BTC";
   const normalizedTimeframe = timeframe === "crypto_5m" || timeframe === "crypto_15m" ? timeframe : "all";
 
-  const [strategies, recentClosedMarkets, comparison, priorResults] = await Promise.all([
+  const [strategies, priorResults] = await Promise.all([
     fetchStrategies(),
-    fetchClosedMarkets(normalizedAsset, undefined, Math.max(limit, 24)),
-    runClosedMarketComparison(normalizedAsset, undefined, Math.max(limit, 24)),
     fetchClosedMarketResults(),
   ]);
+  const comparison = {
+    bars_only:
+      findLatestClosedMarketReport(priorResults, { mode: "bars_only", asset: normalizedAsset }) ??
+      emptyBatchReport("bars_only", normalizedAsset),
+    bars_plus_hyperliquid:
+      findLatestClosedMarketReport(priorResults, { mode: "bars_plus_hyperliquid", asset: normalizedAsset }) ??
+      emptyBatchReport("bars_plus_hyperliquid", normalizedAsset),
+  };
 
   const enriched5m = buildEdgeSlice(comparison.bars_plus_hyperliquid, "crypto_5m");
   const enriched15m = buildEdgeSlice(comparison.bars_plus_hyperliquid, "crypto_15m");
   const bars5m = buildEdgeSlice(comparison.bars_only, "crypto_5m");
   const bars15m = buildEdgeSlice(comparison.bars_only, "crypto_15m");
   const latestResult = priorResults[0];
-  const totalClosedBTC = recentClosedMarkets.length;
+  const totalClosedBTC = comparison.bars_plus_hyperliquid.total_markets_evaluated || comparison.bars_only.total_markets_evaluated;
 
   const visibleSections =
     normalizedTimeframe === "crypto_5m"
@@ -397,7 +391,6 @@ export async function BacktestResults({
             section.subtitle,
             section.enriched,
             section.bars,
-            recentClosedMarkets,
           )}
         </div>
       ))}

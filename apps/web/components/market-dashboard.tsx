@@ -1,6 +1,13 @@
 import Link from "next/link";
 
-import { fetchMarkets, fetchPaperBlotter, fetchSystemHealth, runClosedMarketComparison } from "../lib/api";
+import {
+  fetchClosedMarketResults,
+  fetchMarkets,
+  fetchPaperBlotter,
+  fetchSystemHealth,
+  findLatestClosedMarketReport,
+  type ClosedMarketBatchReport,
+} from "../lib/api";
 import { buildEdgeSlice } from "../lib/edge";
 import { formatLosAngelesDateTime, losAngelesTimeZoneLabel } from "../lib/time";
 
@@ -12,13 +19,38 @@ function dashboardHitRateLabel(hitRate: number, sampleSize: number): string {
   return sampleSize ? `${(hitRate * 100).toFixed(1)}%` : "n/a";
 }
 
+function emptyBatchReport(mode: ClosedMarketBatchReport["mode"]): ClosedMarketBatchReport {
+  return {
+    run_id: `ui-empty-${mode}`,
+    strategy_name: "combined_cvd_gap",
+    mode,
+    asset_filter: "BTC",
+    timeframe_filter: undefined,
+    limit: 0,
+    created_at: undefined,
+    total_markets_evaluated: 0,
+    metrics: [],
+    coverage: {
+      bars_only: 0,
+      bars_plus_trades: 0,
+      bars_plus_trades_plus_orderbook: 0,
+    },
+    records: [],
+  };
+}
+
 export async function MarketDashboard() {
-  const [markets, blotter, health, btcComparison] = await Promise.all([
+  const [markets, blotter, health, results] = await Promise.all([
     fetchMarkets(),
     fetchPaperBlotter(),
     fetchSystemHealth(),
-    runClosedMarketComparison("BTC", undefined, 24),
+    fetchClosedMarketResults(),
   ]);
+  const btcComparison = {
+    bars_only: findLatestClosedMarketReport(results, { mode: "bars_only", asset: "BTC" }) ?? emptyBatchReport("bars_only"),
+    bars_plus_hyperliquid:
+      findLatestClosedMarketReport(results, { mode: "bars_plus_hyperliquid", asset: "BTC" }) ?? emptyBatchReport("bars_plus_hyperliquid"),
+  };
   const liveMarkets = markets.filter((market) => market.status === "active");
   const crypto5m = markets.filter((market) => market.market_type === "crypto_5m").length;
   const crypto15m = markets.filter((market) => market.market_type === "crypto_15m").length;
