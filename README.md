@@ -1,215 +1,128 @@
 # Polymarket Trader
 
-Production-minded research and trading platform scaffold for Polymarket, starting with 5-minute and 15-minute crypto markets and designed to expand to weather and other event markets.
+Research-first Polymarket platform for short-horizon crypto markets. The current repo is aimed at observation, replay, baseline backtesting, and dry-run paper workflows. It is not claiming live-trading readiness.
 
-## Phase 1 scope
+## Getting Started
 
-- Monorepo scaffold
-- Historical store schema and migrations
-- Market catalog ingestion
-- Mockable trade and order book ingestion
-- FastAPI backend for market browsing and replay
-- Next.js dashboard and replay UI
-- Docker Compose local stack
-- Seed data and sample tests
+Fastest path from a fresh clone:
 
-## Current build status
+1. Clone the repo:
 
-- Phase 1: implemented as a mostly mock-first vertical slice, with a real Polymarket discovery path now available behind config and a partially working real websocket ingestion path
-- Phase 2: partially implemented with market-window alignment, local and external CVD features, and a baseline fair-value model
-- Phase 3: partially implemented with a strategy registry, stored backtest reports, and cost-aware baseline backtest scaffolding
-- Phase 4: partially implemented with paper-trading status and blotter plus execution and rules-engine scaffolds
+```bash
+git clone https://github.com/mshihadeh1/Polymarket_Trader.git
+cd Polymarket_Trader
+git switch codex/persistence-timescale
+```
 
-The remaining work is still explicit in code and docs: persistent historical ingestion into the full Timescale schema, richer queue and latency simulation, and a real live-paper loop.
+2. Copy the root env file:
 
-## Monorepo layout
+```bash
+cp .env.example .env
+```
 
-- `apps/api`: FastAPI backend and API composition root
-- `apps/web`: Next.js research dashboard
-- `services/market_catalog`: market metadata and filtering
-- `services/polymarket_ingestor`: Polymarket metadata, book, trade, and raw-event ingestion
-- `services/hyperliquid_ingestor`: Hyperliquid trade and book ingestion
-- `services/feature_engine`: market-window alignment and feature computation
-- `services/fair_value_models`: interpretable baseline fair-value models
-- `services/backtester`: replay/backtest scaffolding
-- `services/paper_trader`: paper-trading state and risk-facing status
-- `services/execution_engine`: dry-run-only execution scaffold
-- `services/rules_engine`: resolution rule normalization scaffold
-- `packages/core_types`: shared typed schemas
-- `packages/config`: environment-based settings
-- `packages/utils`: reusable time and feature utilities
-- `packages/clients`: exchange/client adapters with mock implementations
-- `infrastructure/docker-compose.yml`: local stack entrypoint
-- `infrastructure/env/.env.example`: environment template
-- `infrastructure/migrations`: SQL schema migrations
-- `data/seed`: mock seed payloads for Polymarket and Hyperliquid
-- `tests`: cross-service research tests
+PowerShell:
 
-## Quick start
+```powershell
+Copy-Item .env.example .env
+```
 
-1. Copy `.env.example` to `.env`.
-2. Copy `infrastructure/env/.env.example` to `.env` if you want a root env file as well.
 3. Start the stack:
 
 ```bash
-docker compose -f infrastructure/docker-compose.yml up --build
+docker compose --env-file .env -f infrastructure/docker-compose.yml up --build
 ```
 
-3. Backend API:
-   - `http://localhost:8000/docs`
-4. Frontend:
-   - `http://localhost:3000`
-
-## Local development
-
-### API
+Or use the helper scripts:
 
 ```bash
-cd apps/api
-pip install -e .[dev]
-uvicorn polymarket_trader.main:app --reload --port 8000
+./scripts/dev-up.sh
 ```
 
-### Web
+PowerShell:
+
+```powershell
+./scripts/dev-up.ps1
+```
+
+4. Open the UI:
+- frontend: [http://localhost:3000](http://localhost:3000)
+- backend docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+5. Verify health:
 
 ```bash
-cd apps/web
-npm install
-npm run dev
+./scripts/check-health.sh
 ```
 
-## Environment
+PowerShell:
 
-See [infrastructure/env/.env.example](C:/Users/Mahdi/Documents/Polymarket_Trader/infrastructure/env/.env.example) for supported variables. Live execution is disabled by default. Polymarket connectivity and external historical market data are isolated behind adapters so mock clients and pluggable providers can be used in development and tests.
+```powershell
+./scripts/check-health.ps1
+```
 
-The initial free historical provider is Binance, but downstream services consume only normalized internal bars, trades, and order book snapshots. Provider selection is configuration-driven so future sources such as Tardis, Parquet, or custom datasets do not require replay or strategy rewrites.
+## First 10 Minutes After Clone
 
-## External Market Data Providers
+1. Copy `.env.example` to `.env`.
+2. Leave the default mock settings alone for the first run.
+3. Start Docker Compose with `docker compose --env-file .env -f infrastructure/docker-compose.yml up --build`.
+4. Open the dashboard at [http://localhost:3000](http://localhost:3000).
+5. Confirm the dashboard shows `mock venue` and a loaded market table.
+6. Open [http://localhost:8000/healthz](http://localhost:8000/healthz) and [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health).
+7. Open one market detail page from the dashboard.
+8. If you want real observation next, flip the Polymarket mock flags in `.env` and restart.
+9. If you want backtests on your own data next, switch the external provider to `csv` and point `CSV_PROVIDER_PATHS` to your files.
 
-The external historical market data path now uses a provider interface in [packages/clients/market_data_provider/base.py](C:/Users/Mahdi/Documents/Polymarket_Trader/packages/clients/market_data_provider/base.py).
+## Run Modes
 
-- Provider interface: `HistoricalMarketDataProvider`
-- Normalized internal models: `OHLCVBar`, `ExternalTrade`, `ExternalOrderBookSnapshot`, `ProviderCapabilities`
-- Provider selection: `EXTERNAL_HISTORICAL_PROVIDER=binance`
-- Symbol mapping: `EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT"}`
+### Mock mode
 
-Current provider support:
-- `binance`: implemented for historical 1-minute OHLCV, with trades and snapshots available as provider methods
-- `csv`: implemented for local 1-minute OHLCV datasets
-- `tardis`: placeholder scaffold
-- `parquet`: placeholder scaffold
+Best for first launch, UI verification, and basic development.
 
-The application stores both raw provider payloads and normalized records in the in-memory runtime state. Downstream modules consume only normalized internal models.
-
-### Local historical datasets
-
-Use the CSV provider when you want to backtest from your own 1-minute files instead of Binance.
-
-Config:
+Use:
 
 ```bash
-EXTERNAL_HISTORICAL_PROVIDER=csv
-USE_MOCK_EXTERNAL_PROVIDER=false
-CSV_PROVIDER_PATHS={"BTC":"data/datasets/btc_1m.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/sol_1m.csv"}
-EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}
+USE_MOCK_POLYMARKET=true
+USE_MOCK_POLYMARKET_CLIENT=true
+EXTERNAL_HISTORICAL_PROVIDER=binance
+USE_MOCK_EXTERNAL_PROVIDER=true
+PAPER_TRADING_LOOP_ENABLED=false
 ```
 
-Expected CSV columns:
-- `ts` or `timestamp`
-- `open`
-- `high`
-- `low`
-- `close`
-- `volume`
+What to expect:
+- seeded markets and seeded venue data
+- dashboard, replay, backtests, and paper pages all load
+- safest mode for a fresh clone
 
-Each downstream service continues to consume normalized `OHLCVBar` records, so switching between Binance and local CSV data does not require strategy or replay rewrites.
+### Real Polymarket observation mode
 
-## Real Polymarket Observation Mode
+Best for a 2 to 4 hour venue observation session.
 
-The repo now supports a narrow real Polymarket observation mode behind config while preserving the mock path for fallback.
-
-Config:
-
-```bash
-USE_MOCK_POLYMARKET_CLIENT=false
-POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
-POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
-```
-
-Current real Polymarket status:
-- real discovery from Gamma works and populates market state
-- real markets are classified into short-horizon crypto buckets and exposed through the existing market endpoints
-- the websocket path is supervised for long observation runs with reconnect counters, last-event timestamps, and dropped/duplicate event tracking
-- raw websocket payloads are stored before normalization
-- the UI exposes live observation status and quick-launch links for BTC 5m and BTC 15m markets
-
-Known limitations / TODOs:
-- the websocket adapter currently handles only a narrow set of market-channel events: `last_trade_price`, `price_change`, `best_bid_ask`, and `book`
-- this is observation-grade hardening, not trading-grade hardening
-- some Polymarket feed fields are normalized defensively because public docs are not exhaustive for every event variant
-- this slice focuses on live ingestion and in-memory/runtime persistence, not full Timescale historical persistence yet
-
-## 2-4 Hour Observation Runbook
-
-Use this flow when you want to observe real Polymarket BTC 5m and BTC 15m markets for a few hours.
-
-1. Configure real Polymarket mode in `.env`:
+Use:
 
 ```bash
 USE_MOCK_POLYMARKET=false
 USE_MOCK_POLYMARKET_CLIENT=false
-USE_MOCK_EXTERNAL_PROVIDER=true
-ENABLE_DB_PERSISTENCE=false
 POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
 POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
+USE_MOCK_EXTERNAL_PROVIDER=true
 ```
 
-2. Start the API:
+What is real:
+- active Polymarket market discovery
+- BTC and ETH short-horizon market classification
+- live websocket observation with reconnect supervision
+- UI status for connection state, last event time, dropped events, and duplicate counts
 
-```bash
-cd apps/api
-uvicorn polymarket_trader.main:app --reload --port 8000
-```
+What is not claimed:
+- no live trading
+- no trading-grade execution reliability
+- websocket normalization is still narrow and defensive
 
-3. Start the web app:
+### Historical backtest mode
 
-```bash
-cd apps/web
-npm install
-npm run dev
-```
+Best for replaying your own 1-minute datasets.
 
-4. Open the dashboard at `http://localhost:3000`.
-
-5. Use the `BTC 5m` and `BTC 15m` quick-launch cards on the dashboard to open one market detail page for each family.
-
-6. Keep the following visible during the session:
-- dashboard observation status card
-- reconnect count
-- last-event time
-- dropped / duplicate counts
-- the selected BTC 5m and BTC 15m market detail pages
-
-7. If the websocket falls behind, reload the dashboard and check:
-- `live feed` / `websocket connected` badges
-- `last event` freshness
-- `dropped / duplicate` counts
-- API `GET /api/v1/system/health`
-
-8. If you need to reset the in-memory session during observation:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/ingestion/bootstrap
-```
-
-This runbook is meant for venue observation and data inspection only. It does not imply live trading readiness.
-
-## Historical backtest runbook
-
-Use this flow when you want to replay your own 1-minute BTC, ETH, or SOL datasets bar by bar.
-
-1. Put your CSV files in a local folder such as `data/datasets/`.
-2. Configure the provider:
+Use:
 
 ```bash
 EXTERNAL_HISTORICAL_PROVIDER=csv
@@ -217,33 +130,20 @@ USE_MOCK_EXTERNAL_PROVIDER=false
 CSV_PROVIDER_PATHS={"BTC":"data/datasets/btc_1m.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/sol_1m.csv"}
 ```
 
-3. Start the API:
+What it does today:
+- loads local 1-minute CSV bars into normalized `OHLCVBar` records
+- recomputes features bar by bar
+- replays sequentially through the current baseline backtester
+- outputs trade list, equity curve, net PnL, drawdown, and expectancy
 
-```bash
-cd apps/api
-uvicorn polymarket_trader.main:app --reload --port 8000
-```
+Truthful limitation:
+- the backtester is usable for baseline research, but the execution model is still intentionally simple rather than microstructure-realistic
 
-4. Run a backtest against a loaded market:
+### Live paper mode
 
-```bash
-curl -X POST "http://localhost:8000/api/v1/backtests/<market_id>?strategy_name=combined_cvd_gap"
-```
+Best for a dry-run monitoring loop. This is still partial.
 
-5. Inspect the returned report:
-- `trades`
-- `equity_curve`
-- `net_pnl`
-- `drawdown`
-- `expectancy_per_trade`
-
-The sequential backtester now steps bar by bar over normalized 1-minute external bars, recomputes features at each step, and maintains simple position state with explicit fee and slippage assumptions.
-
-## Live paper mode runbook
-
-Use this flow when you want a dry-run loop running for a few hours alongside real Polymarket observation.
-
-1. Enable real Polymarket mode and the paper loop:
+Use:
 
 ```bash
 USE_MOCK_POLYMARKET=false
@@ -256,36 +156,156 @@ PAPER_TRADING_STRATEGY=combined_cvd_gap
 LIVE_EXECUTION_ENABLED=false
 ```
 
-2. Start the API and web app.
-3. Open `/paper-trading`.
-4. Watch:
-- selected markets
-- latest signal
-- last decision
-- open positions
-- realized and unrealized PnL
-- loop health and last update time
+What it does today:
+- periodically evaluates selected live markets
+- appends dry-run decisions continuously
+- tracks latest signal, last decision, open positions, realized PnL, unrealized PnL, and loop health
 
-Helpful control endpoints:
+Truthful limitation:
+- this is a supervised dry-run loop for observation and research, not a full live-paper execution simulator
+
+## Local Historical Datasets
+
+The repo now supports local 1-minute CSV datasets through the provider layer without changing downstream code.
+
+Expected CSV columns:
+- `ts` or `timestamp`
+- `open`
+- `high`
+- `low`
+- `close`
+- `volume`
+
+Example config:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/paper-trading/start
-curl -X POST http://localhost:8000/api/v1/paper-trading/stop
-curl -X POST http://localhost:8000/api/v1/paper-trading/cycle
+EXTERNAL_HISTORICAL_PROVIDER=csv
+USE_MOCK_EXTERNAL_PROVIDER=false
+CSV_PROVIDER_PATHS={"BTC":"data/datasets/btc_1m.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/sol_1m.csv"}
+EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}
 ```
 
-This remains dry-run only. No live execution path is enabled by these settings.
+Downstream modules remain provider-agnostic:
+- feature engine reads normalized bars
+- market-window service reads normalized bars
+- backtester reads normalized bars
+- UI reads API output, not provider payloads
 
-Optional local persistence for feature snapshots, backtest reports, and paper decisions can be enabled with:
+## Environment Notes
+
+The main file to copy is [`.env.example`](C:/Users/Mahdi/Documents/Polymarket_Trader/.env.example). Docker Compose now reads the root `.env` directly.
+
+Most important flags:
+- `USE_MOCK_POLYMARKET` and `USE_MOCK_POLYMARKET_CLIENT`
+  Controls whether the app boots from seeded mock venue data or the real Polymarket adapter.
+- `POLYMARKET_API_BASE_URL`
+  REST market discovery base URL for real observation mode.
+- `POLYMARKET_WS_URL`
+  websocket endpoint for live Polymarket market events.
+- `EXTERNAL_HISTORICAL_PROVIDER`
+  Selects the historical source used by research flows. Current practical options are `binance` and `csv`.
+- `CSV_PROVIDER_PATHS`
+  Maps internal symbols such as `BTC`, `ETH`, and `SOL` to local CSV file paths.
+- `EXTERNAL_PROVIDER_SYMBOL_MAP`
+  Keeps internal symbols decoupled from vendor-specific symbol strings.
+
+## One-Command Startup
+
+From the repo root:
 
 ```bash
-ENABLE_DB_PERSISTENCE=true
-SQLITE_FALLBACK_PATH=data/polymarket_trader.db
+docker compose --env-file .env -f infrastructure/docker-compose.yml up --build
 ```
 
-That persistence layer is a local development helper, not a claim that the full Timescale ingestion path is already finished.
+Helper scripts:
+- [scripts/dev-up.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-up.sh)
+- [scripts/dev-down.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-down.sh)
+- [scripts/check-health.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/check-health.sh)
+- [scripts/dev-up.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-up.ps1)
+- [scripts/dev-down.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-down.ps1)
+- [scripts/check-health.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/check-health.ps1)
 
-## Phase 1 API endpoints
+## Health And Verification
+
+Core URLs:
+- frontend: [http://localhost:3000](http://localhost:3000)
+- backend docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+- backend health: [http://localhost:8000/healthz](http://localhost:8000/healthz)
+- system health: [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health)
+
+Sample checks:
+
+```bash
+curl http://localhost:8000/healthz
+curl http://localhost:8000/api/v1/system/health
+curl http://localhost:8000/api/v1/markets
+```
+
+Expected mock-mode signs:
+- dashboard shows `mock venue`
+- `/api/v1/system/health` returns `"mock_polymarket": true`
+- market table loads immediately
+
+Expected real-observation signs:
+- dashboard shows `real venue`
+- dashboard shows websocket status and reconnect count
+- `/api/v1/system/health` returns `"mock_polymarket": false`
+- API logs include messages like:
+  - `Polymarket discovery returned ... selected short-horizon markets`
+  - `Polymarket websocket connected for live observation`
+
+## Verification Checklist
+
+- Repo cloned successfully.
+- `.env` created from `.env.example`.
+- `docker compose --env-file .env -f infrastructure/docker-compose.yml up --build` completes.
+- [http://localhost:3000](http://localhost:3000) loads.
+- [http://localhost:8000/docs](http://localhost:8000/docs) loads.
+- [http://localhost:8000/healthz](http://localhost:8000/healthz) returns `{"status":"ok"}`.
+- [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health) returns JSON with market and provider details.
+- Dashboard clearly shows:
+  - mock vs real Polymarket mode
+  - current external provider
+  - connection status
+  - last event time
+- If using CSV backtests, the configured file paths exist and the files have the required columns.
+- If using real observation mode, the dashboard shows live venue badges and a recent event timestamp.
+
+## Troubleshooting
+
+### Docker Compose starts but the web page is blank
+
+- Check [http://localhost:8000/healthz](http://localhost:8000/healthz).
+- Check `NEXT_PUBLIC_API_BASE_URL` in `.env`.
+- Confirm the `api` and `web` containers are both running.
+
+### Dashboard loads but no markets appear
+
+- In mock mode, verify both mock Polymarket flags are `true`.
+- In real mode, verify both mock Polymarket flags are `false`.
+- Check API logs for discovery messages.
+- Call `POST /api/v1/ingestion/bootstrap` to reload the in-memory session.
+
+### Real observation mode connects but shows stale data
+
+- Check the dashboard websocket badge and reconnect count.
+- Check `/api/v1/system/health` for `last_event_at`, `dropped_event_count`, and `duplicate_event_count`.
+- Restart the stack if the websocket loop is stuck.
+
+### CSV historical mode does not load bars
+
+- Verify `EXTERNAL_HISTORICAL_PROVIDER=csv`.
+- Verify `USE_MOCK_EXTERNAL_PROVIDER=false`.
+- Verify each `CSV_PROVIDER_PATHS` file exists relative to the repo root or as an absolute path.
+- Verify the CSV has `ts` or `timestamp`, plus `open/high/low/close/volume`.
+
+### Paper loop is not running
+
+- Verify `PAPER_TRADING_LOOP_ENABLED=true`.
+- Check `/api/v1/paper-trading/status`.
+- The current paper loop is dry-run only and intentionally simple. It is for monitoring and research, not live execution.
+
+## API Surface
 
 - `GET /healthz`
 - `GET /api/v1/markets`
@@ -309,24 +329,23 @@ That persistence layer is a local development helper, not a claim that the full 
 - `GET /api/v1/execution/status`
 - `GET /api/v1/system/health`
 
-## Web pages
+## Monorepo Layout
 
-- `/`: active market dashboard
-- `/markets/[marketId]`: market detail with local and external context plus feature panel
-- `/replay`: historical replay viewer
-- `/backtests`: backtest results and strategy list
-- `/paper-trading`: paper blotter and strategy status
+- `apps/api`: FastAPI backend
+- `apps/web`: Next.js dashboard
+- `services/polymarket_ingestor`: Polymarket discovery and live observation ingestion
+- `services/feature_engine`: feature computation and market window alignment
+- `services/backtester`: sequential bar replay backtesting
+- `services/paper_trader`: continuous dry-run paper loop
+- `packages/clients`: provider and venue adapters
+- `packages/core_types`: shared typed models
+- `infrastructure/docker-compose.yml`: local stack
+- `tests`: focused backend tests
 
-## Testing
+## Truthful Current Status
 
-```bash
-python -m pytest apps/api/tests tests
-```
-
-## Notes
-
-- Hyperliquid remains mock-first in the current app bootstrap.
-- Polymarket observation mode is usable for multi-hour dry-run monitoring, but this still does not claim live trading readiness.
-- Live order routing is not implemented and all execution paths remain dry-run only.
-- Weather and other market types are reflected in the schema and interfaces, but their specialized models and rule parsing land in later phases.
-- The backtester now replays 1-minute bars sequentially, but its execution model is still intentionally simple and explicit rather than microstructure-realistic.
+- Real Polymarket observation mode is usable for multi-hour monitoring.
+- Historical backtesting is usable for baseline bar-by-bar research on local 1-minute CSV datasets.
+- Live paper mode is partial but useful for continuous dry-run monitoring.
+- Live execution is not implemented.
+- Weather and broader market-type expansion are not part of the current usable local workflow.

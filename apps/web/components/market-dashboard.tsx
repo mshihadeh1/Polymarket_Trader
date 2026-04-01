@@ -68,6 +68,10 @@ export async function MarketDashboard() {
                 <strong>{health.mock_polymarket ? "Mock" : "Real"}</strong>
               </div>
               <div className="kpi">
+                <span className="metric-label">External provider</span>
+                <strong>{health.external_historical_provider}</strong>
+              </div>
+              <div className="kpi">
                 <span className="metric-label">Paper fills</span>
                 <strong>{blotter.length}</strong>
               </div>
@@ -88,16 +92,19 @@ export async function MarketDashboard() {
           <p className="muted">Live-session health for a multi-hour monitoring run.</p>
         </div>
         <div className="stack">
-          <div className="signal-card">
-            <span className="metric-label">Polymarket client</span>
-            <strong>{health.polymarket_client}</strong>
-            <div className="badge-stack">
-              <span className={`badge ${health.mock_polymarket ? "badge-mock" : "badge-live"}`}>
-                {health.mock_polymarket ? "mock feed" : "live feed"}
-              </span>
-              <span className="badge badge-historical">historical + replay</span>
+            <div className="signal-card">
+              <span className="metric-label">Polymarket client</span>
+              <strong>{health.polymarket_client}</strong>
+              <div className="badge-stack">
+                <span className={`badge ${health.mock_polymarket ? "badge-mock" : "badge-live"}`}>
+                  {health.mock_polymarket ? "mock feed" : "live feed"}
+                </span>
+                <span className={`badge ${health.mock_external_provider ? "badge-mock" : "badge-historical"}`}>
+                  {health.mock_external_provider ? "mock history" : "historical provider"}
+                </span>
+                <span className="badge badge-provider">{health.external_historical_provider}</span>
+              </div>
             </div>
-          </div>
           <div className="signal-card">
             <span className="metric-label">Last event</span>
             <strong>{observation.last_event_at ? formatTime(observation.last_event_at) : "none yet"}</strong>
@@ -106,9 +113,13 @@ export async function MarketDashboard() {
             </span>
           </div>
           <div className="signal-card">
-            <span className="metric-label">Dropped / duplicate</span>
+            <span className="metric-label">Connection health</span>
             <strong>{observation.dropped_event_count} / {observation.duplicate_event_count}</strong>
-            <span className="muted">{observation.last_error ?? "No recent stream errors."}</span>
+            <span className="muted">
+              dropped / duplicate
+              <br />
+              {observation.last_error ?? `last connect ${formatTime(observation.last_connect_at)}`}
+            </span>
           </div>
         </div>
       </section>

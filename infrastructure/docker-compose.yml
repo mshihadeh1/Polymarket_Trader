@@ -23,7 +23,7 @@ services:
       context: ..
       dockerfile: infrastructure/docker/api.Dockerfile
     env_file:
-      - ./env/.env.example
+      - ../.env
     volumes:
       - ../apps/api:/app/apps/api
       - ../services:/app/services
@@ -40,7 +40,7 @@ services:
       context: ..
       dockerfile: infrastructure/docker/web.Dockerfile
     env_file:
-      - ./env/.env.example
+      - ../.env
     environment:
       NEXT_PUBLIC_API_BASE_URL: http://api:8000
     volumes:
