@@ -30,19 +30,24 @@ class FeatureEngineService:
         market = self._state.market_details.get(market_id)
         if market is None:
             raise KeyError(f"Unknown market_id={market_id}")
+        external_bars_all = self._state.external_bars.get(market_id, [])
         polymarket_trades_all = self._state.polymarket_trades.get(market_id, [])
         external_trades_all = self._state.external_trades.get(market_id, [])
         orderbooks_all = self._state.polymarket_orderbooks.get(market_id, [])
         external_orderbooks_all = self._state.external_orderbooks.get(market_id, [])
+        external_bars = [bar for bar in external_bars_all if as_of is None or bar.ts <= as_of]
         polymarket_trades = [trade for trade in polymarket_trades_all if as_of is None or trade.ts <= as_of]
         external_trades = [trade for trade in external_trades_all if as_of is None or trade.ts <= as_of]
         orderbooks = [book for book in orderbooks_all if as_of is None or book.ts <= as_of]
         external_orderbooks = [book for book in external_orderbooks_all if as_of is None or book.ts <= as_of]
-        current_ts = None
-        if orderbooks:
+        if as_of is not None:
+            current_ts = as_of
+        elif orderbooks:
             current_ts = orderbooks[-1].ts
         elif polymarket_trades:
             current_ts = polymarket_trades[-1].ts
+        elif external_bars:
+            current_ts = external_bars[-1].ts
         else:
             current_ts = market.opens_at
         context = self._market_window.get_external_context(market_id, as_of=current_ts)
@@ -54,6 +59,11 @@ class FeatureEngineService:
         realized_vol = None
         if context.open_price and context.current_price:
             realized_vol = abs((context.current_price - context.open_price) / context.open_price)
+        if realized_vol is None and len(external_bars) >= 2:
+            first_close = external_bars[0].close
+            last_close = external_bars[-1].close
+            if first_close:
+                realized_vol = abs((last_close - first_close) / first_close)
         fair_value_gap = None
         fair_value = None
         if realized_vol is not None and market.price_to_beat is not None and context.current_price is not None:

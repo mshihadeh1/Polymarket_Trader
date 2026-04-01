@@ -32,12 +32,24 @@ class Settings(BaseSettings):
     external_historical_provider: str = Field(default="binance", alias="EXTERNAL_HISTORICAL_PROVIDER")
     use_mock_external_provider: bool = Field(default=True, alias="USE_MOCK_EXTERNAL_PROVIDER")
     binance_base_url: str = Field(default="https://api.binance.com", alias="BINANCE_BASE_URL")
+    csv_provider_paths: str = Field(
+        default='{"BTC":"data/datasets/btc_1m.csv","ETH":"data/datasets/eth_1m.csv","SOL":"data/datasets/sol_1m.csv"}',
+        alias="CSV_PROVIDER_PATHS",
+    )
     polymarket_api_base_url: str = Field(default="https://gamma-api.polymarket.com", alias="POLYMARKET_API_BASE_URL")
     polymarket_ws_url: str = Field(default="wss://ws-subscriptions-clob.polymarket.com/ws/market", alias="POLYMARKET_WS_URL")
     external_provider_symbol_map: str = Field(
-        default='{"BTC":"BTCUSDT","ETH":"ETHUSDT"}',
+        default='{"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}',
         alias="EXTERNAL_PROVIDER_SYMBOL_MAP",
     )
+    backtest_fee_bps: float = Field(default=7.0, alias="BACKTEST_FEE_BPS")
+    backtest_slippage_bps: float = Field(default=5.0, alias="BACKTEST_SLIPPAGE_BPS")
+    backtest_position_size: float = Field(default=100.0, alias="BACKTEST_POSITION_SIZE")
+    paper_trading_loop_enabled: bool = Field(default=False, alias="PAPER_TRADING_LOOP_ENABLED")
+    paper_trading_loop_seconds: int = Field(default=30, alias="PAPER_TRADING_LOOP_SECONDS")
+    paper_trading_underlyings: str = Field(default="BTC", alias="PAPER_TRADING_UNDERLYINGS")
+    paper_trading_market_types: str = Field(default="crypto_5m,crypto_15m", alias="PAPER_TRADING_MARKET_TYPES")
+    paper_trading_strategy: str = Field(default="combined_cvd_gap", alias="PAPER_TRADING_STRATEGY")
 
 
 @lru_cache

@@ -290,6 +290,27 @@ class BacktestMetric(BaseModel):
     value: float
 
 
+class BacktestTrade(BaseModel):
+    ts: datetime
+    market_id: UUID
+    action: Literal["open_long", "close_long", "open_short", "close_short"]
+    side: Literal["buy_yes", "buy_no"]
+    price: float
+    size: float
+    gross_pnl: float = 0.0
+    net_pnl: float = 0.0
+    cost: float = 0.0
+    reason: str | None = None
+
+
+class EquityPoint(BaseModel):
+    ts: datetime
+    equity: float
+    realized_pnl: float
+    unrealized_pnl: float
+    position: float
+
+
 class BacktestReport(BaseModel):
     run_id: str
     strategy_name: str
@@ -298,6 +319,8 @@ class BacktestReport(BaseModel):
     created_at: datetime | None = None
     trade_count: int = 0
     decisions: list[StrategyDecision] = Field(default_factory=list)
+    trades: list[BacktestTrade] = Field(default_factory=list)
+    equity_curve: list[EquityPoint] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
 
@@ -310,13 +333,43 @@ class PaperTradeDecision(BaseModel):
     size: float
     status: str
     reason: str | None = None
+    signal_value: float | None = None
+    confidence: float | None = None
+
+
+class PaperSignalSnapshot(BaseModel):
+    market_id: UUID
+    ts: datetime
+    signal_value: float
+    decision: str
+    confidence: float
+    fair_value_gap: float | None = None
+    midpoint: float | None = None
+
+
+class PaperPosition(BaseModel):
+    market_id: UUID
+    side: Literal["buy_yes", "buy_no"]
+    size: float
+    avg_price: float
+    mark_price: float
+    unrealized_pnl: float
+    opened_at: datetime
 
 
 class PaperTradingStatus(BaseModel):
     strategy_name: str
     dry_run_only: bool
     active_market_ids: list[UUID]
+    selected_market_ids: list[UUID] = Field(default_factory=list)
     open_positions: dict[str, float] = Field(default_factory=dict)
+    position_details: list[PaperPosition] = Field(default_factory=list)
+    latest_signals: list[PaperSignalSnapshot] = Field(default_factory=list)
+    last_decision: PaperTradeDecision | None = None
+    loop_running: bool = False
+    last_update_at: datetime | None = None
+    cycle_count: int = 0
+    loop_error: str | None = None
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
 

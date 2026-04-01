@@ -15,14 +15,23 @@ class MarketWindowService:
         market = self._state.market_details.get(market_id)
         if market is None:
             raise KeyError(f"Unknown market_id={market_id}")
+        external_bars = [
+            bar
+            for bar in self._state.external_bars.get(market_id, [])
+            if as_of is None or bar.ts <= as_of
+        ]
         external_orderbooks = [
             book
             for book in self._state.external_orderbooks.get(market_id, [])
             if as_of is None or book.ts <= as_of
         ]
-        current = external_orderbooks[-1].ts if external_orderbooks else market.opens_at
-        open_price = market.open_reference_price
-        current_price = external_orderbooks[-1].mid_price if external_orderbooks else open_price
+        current = external_orderbooks[-1].ts if external_orderbooks else external_bars[-1].ts if external_bars else market.opens_at
+        open_price = market.open_reference_price or (external_bars[0].open if external_bars else None)
+        current_price = (
+            external_orderbooks[-1].mid_price
+            if external_orderbooks
+            else external_bars[-1].close if external_bars else open_price
+        )
         ret = None
         if open_price and current_price:
             ret = (current_price - open_price) / open_price
