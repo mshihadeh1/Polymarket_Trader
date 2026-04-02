@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from packages.clients.hyperliquid_client import MockHyperliquidClient, RealHyperliquidClient
+from packages.clients.polymarket_client import PolymarketExecutionAdapter
 from packages.clients.market_data_provider import HistoricalMarketDataProvider, build_historical_market_data_provider
 from packages.clients.polymarket_client import MockPolymarketClient, PolymarketClient, RealPolymarketClient
 from packages.config import Settings
@@ -122,6 +123,7 @@ def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Cont
     external_provider = build_historical_market_data_provider(settings, root=root)
     hyperliquid_recent_client = build_hyperliquid_recent_client(settings, root=root)
     persistence = ResearchPersistence(create_session_factory(settings))
+    execution_adapter = build_polymarket_execution_adapter(settings)
     if hasattr(external_provider, "validate_datasets"):
         for report in external_provider.validate_datasets():
             state.external_dataset_validation[report.symbol] = report
@@ -184,7 +186,12 @@ def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Cont
             feature_engine=feature_engine,
             persistence=persistence,
         ),
-        execution_engine=ExecutionEngineService(),
+        execution_engine=ExecutionEngineService(
+            settings=settings,
+            state=state,
+            persistence=persistence,
+            adapter=execution_adapter,
+        ),
         rules_engine=RulesEngineService(),
         persistence=persistence,
         polymarket_client=polymarket_client,
@@ -211,4 +218,14 @@ def build_hyperliquid_recent_client(settings: Settings, root: Path):
     return RealHyperliquidClient(
         info_url=settings.hyperliquid_info_url,
         trade_limit=settings.hyperliquid_recent_trade_limit,
+    )
+
+
+def build_polymarket_execution_adapter(settings: Settings) -> PolymarketExecutionAdapter:
+    return PolymarketExecutionAdapter(
+        host=settings.polymarket_clob_host,
+        chain_id=settings.polymarket_chain_id,
+        private_key=settings.polymarket_private_key,
+        funder=settings.polymarket_funder,
+        signature_type=settings.polymarket_signature_type,
     )

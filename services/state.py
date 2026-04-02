@@ -15,6 +15,8 @@ from packages.core_types.schemas import (
     MinuteResearchRow,
     OrderBookSnapshot,
     PaperTradeDecision,
+    ExecutionFillRecord,
+    ExecutionOrderRecord,
     SyntheticBatchReport,
     SyntheticFeatureSnapshot,
     SyntheticMarketSample,
@@ -52,6 +54,8 @@ class InMemoryState:
     backtest_reports: list[BacktestReport] = field(default_factory=list)
     closed_market_batch_reports: list[ClosedMarketBatchReport] = field(default_factory=list)
     paper_decisions: list[PaperTradeDecision] = field(default_factory=list)
+    execution_orders: list[ExecutionOrderRecord] = field(default_factory=list)
+    execution_fills: list[ExecutionFillRecord] = field(default_factory=list)
     polymarket_observation: PolymarketObservationStatus = field(
         default_factory=lambda: PolymarketObservationStatus(source_mode="mock")
     )

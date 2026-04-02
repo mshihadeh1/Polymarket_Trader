@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from polymarket_trader.bootstrap import Container
+from packages.core_types.schemas import ExecutionOrderIntent
 from packages.utils.time import parse_dt
 
 
@@ -345,6 +346,18 @@ def build_router(container: Container) -> APIRouter:
     def execution_status():
         return container.execution_engine.status()
 
+    @router.get("/execution/orders")
+    def execution_orders():
+        return container.execution_engine.list_orders()
+
+    @router.get("/execution/fills")
+    def execution_fills():
+        return container.execution_engine.list_fills()
+
+    @router.post("/execution/submit")
+    def submit_execution_order(intent: ExecutionOrderIntent):
+        return container.execution_engine.submit_intent(intent)
+
     @router.get("/system/health")
     def system_health():
         return {
@@ -356,6 +369,7 @@ def build_router(container: Container) -> APIRouter:
             "external_historical_provider": container.settings.external_historical_provider,
             "mock_external_provider": container.settings.use_mock_external_provider,
             "mock_hyperliquid_recent": container.settings.use_mock_hyperliquid_recent,
+            "live_execution_enabled": container.settings.live_execution_enabled,
             "dataset_validation": list(container.state.external_dataset_validation.values()),
             "external_provider_capabilities": container.external_market_data_provider.capabilities(),
         }

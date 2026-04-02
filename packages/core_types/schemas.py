@@ -605,3 +605,70 @@ class RiskSettings(BaseModel):
     dry_run_only: bool
     max_market_exposure_usd: float
     global_kill_switch: bool
+
+
+class ExecutionOrderIntent(BaseModel):
+    intent_id: str
+    strategy_name: str
+    market_id: UUID
+    token_id: str
+    market_side: Literal["buy_yes", "buy_no", "sell_yes", "sell_no"]
+    order_side: Literal["BUY", "SELL"]
+    price: float
+    size: float
+    order_type: Literal["GTC", "GTD", "FOK", "IOC"] = "GTC"
+    post_only: bool = False
+    dry_run: bool = True
+    created_at: datetime | None = None
+
+
+class ExecutionOrderRecord(BaseModel):
+    order_id: str
+    intent_id: str
+    strategy_name: str
+    market_id: UUID
+    token_id: str
+    market_side: Literal["buy_yes", "buy_no", "sell_yes", "sell_no"]
+    order_side: Literal["BUY", "SELL"]
+    price: float
+    size: float
+    order_type: Literal["GTC", "GTD", "FOK", "IOC"]
+    post_only: bool = False
+    dry_run: bool = True
+    status: str
+    exchange_order_id: str | None = None
+    request_payload: dict[str, Any] = Field(default_factory=dict)
+    response_payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ExecutionFillRecord(BaseModel):
+    fill_id: str
+    order_id: str
+    market_id: UUID
+    token_id: str
+    ts: datetime
+    side: Literal["BUY", "SELL"]
+    price: float
+    size: float
+    fee: float = 0.0
+    fee_currency: str | None = None
+    status: str = "filled"
+    dry_run: bool = True
+    source: str = "paper"
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+
+
+class ExecutionStatus(BaseModel):
+    enabled: bool = False
+    dry_run_default: bool = True
+    live_execution_enabled: bool = False
+    adapter_name: str | None = None
+    open_order_count: int = 0
+    fill_count: int = 0
+    last_order_at: datetime | None = None
+    last_fill_at: datetime | None = None
+    last_error: str | None = None
+    message: str | None = None

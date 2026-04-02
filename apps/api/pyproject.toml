@@ -14,7 +14,8 @@ dependencies = [
   "psycopg[binary]>=3.2.3",
   "pydantic>=2.10.0",
   "pydantic-settings>=2.7.0",
-  "httpx>=0.28.0"
+  "httpx>=0.28.0",
+  "py-clob-client"
 ]
 
 [project.optional-dependencies]

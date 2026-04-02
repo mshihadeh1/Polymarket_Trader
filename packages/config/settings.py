@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     hyperliquid_recent_lookback_minutes: int = Field(default=240, alias="HYPERLIQUID_RECENT_LOOKBACK_MINUTES")
     polymarket_api_base_url: str = Field(default="https://gamma-api.polymarket.com", alias="POLYMARKET_API_BASE_URL")
     polymarket_ws_url: str = Field(default="wss://ws-subscriptions-clob.polymarket.com/ws/market", alias="POLYMARKET_WS_URL")
+    polymarket_clob_host: str = Field(default="https://clob.polymarket.com", alias="POLYMARKET_CLOB_HOST")
+    polymarket_private_key: str | None = Field(default=None, alias="POLYMARKET_PRIVATE_KEY")
+    polymarket_funder: str | None = Field(default=None, alias="POLYMARKET_FUNDER")
+    polymarket_signature_type: int = Field(default=1, alias="POLYMARKET_SIGNATURE_TYPE")
+    polymarket_chain_id: int = Field(default=137, alias="POLYMARKET_CHAIN_ID")
     external_provider_symbol_map: str = Field(
         default='{"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}',
         alias="EXTERNAL_PROVIDER_SYMBOL_MAP",

@@ -192,12 +192,17 @@ PAPER_TRADING_UNDERLYINGS=BTC
 PAPER_TRADING_MARKET_TYPES=crypto_5m,crypto_15m
 PAPER_TRADING_STRATEGY=combined_cvd_gap
 LIVE_EXECUTION_ENABLED=false
+POLYMARKET_CLOB_HOST=https://clob.polymarket.com
+POLYMARKET_PRIVATE_KEY=
+POLYMARKET_FUNDER=
+POLYMARKET_SIGNATURE_TYPE=1
 ```
 
 What it does today:
 - periodically evaluates selected live markets
 - appends dry-run decisions continuously
 - tracks latest signal, last decision, open positions, realized PnL, unrealized PnL, and loop health
+- can be paired with the execution ledger when live routing is later enabled
 
 Truthful limitation:
 - this is a supervised dry-run loop for observation and research, not a full live-paper execution simulator
@@ -570,6 +575,9 @@ curl -X POST "http://localhost:8000/api/v1/ingestion/hydrate-closed-markets?iden
 - `POST /api/v1/paper-trading/stop`
 - `GET /api/v1/risk/settings`
 - `GET /api/v1/execution/status`
+- `GET /api/v1/execution/orders`
+- `GET /api/v1/execution/fills`
+- `POST /api/v1/execution/submit`
 - `GET /api/v1/system/health`
 
 ## Monorepo Layout
@@ -590,5 +598,5 @@ curl -X POST "http://localhost:8000/api/v1/ingestion/hydrate-closed-markets?iden
 - Real Polymarket observation mode is usable for multi-hour monitoring.
 - Closed-market evaluation is usable for baseline research on local 1-minute CSV datasets plus recent Hyperliquid enrichment where available.
 - Live paper mode is partial but useful for continuous dry-run monitoring.
-- Live execution is not implemented.
+- Live execution is scaffolded through the official Polymarket CLOB client but remains disabled by default and should be treated as opt-in only.
 - Weather and broader market-type expansion are not part of the current usable local workflow.

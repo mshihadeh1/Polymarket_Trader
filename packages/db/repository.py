@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,6 +10,8 @@ from sqlalchemy.orm import sessionmaker
 from packages.core_types.schemas import (
     BacktestMetric,
     BacktestReport,
+    ExecutionFillRecord,
+    ExecutionOrderRecord,
     ClosedMarketBatchReport,
     ClosedMarketEvaluationRecord,
     FeatureSnapshot,
@@ -29,6 +32,8 @@ from packages.core_types.schemas import (
 from packages.db.models import (
     BacktestRunRecord,
     ClosedMarketBatchReportRecord,
+    ExecutionFillRecord as ExecutionFillRecordModel,
+    ExecutionOrderRecord as ExecutionOrderRecordModel,
     FeatureSnapshotRecord,
     MinuteBatchReportRecord,
     MinuteFeatureSnapshotRecord,
@@ -265,6 +270,106 @@ class ResearchPersistence:
                 reason=row.reason,
                 signal_value=None,
                 confidence=None,
+            )
+            for row in rows
+        ]
+
+    def save_execution_order(self, order: ExecutionOrderRecord) -> None:
+        if not self._session_factory:
+            return
+        record = ExecutionOrderRecordModel(
+            id=order.order_id,
+            intent_id=order.intent_id,
+            strategy_name=order.strategy_name,
+            market_id=str(order.market_id),
+            token_id=order.token_id,
+            market_side=order.market_side,
+            order_side=order.order_side,
+            price=order.price,
+            size=order.size,
+            order_type=order.order_type,
+            post_only=order.post_only,
+            dry_run=order.dry_run,
+            status=order.status,
+            exchange_order_id=order.exchange_order_id,
+            request_payload=order.request_payload,
+            response_payload=order.response_payload,
+            created_at=order.created_at or datetime.now(timezone.utc),
+            updated_at=order.updated_at or datetime.now(timezone.utc),
+        )
+        self._write(record, merge=True)
+
+    def list_execution_orders(self) -> list[ExecutionOrderRecord]:
+        if not self._session_factory:
+            return []
+        with self._session_factory() as session:
+            rows = session.query(ExecutionOrderRecordModel).order_by(ExecutionOrderRecordModel.created_at.desc()).all()
+        return [
+            ExecutionOrderRecord(
+                order_id=row.id,
+                intent_id=row.intent_id,
+                strategy_name=row.strategy_name,
+                market_id=UUID(row.market_id),
+                token_id=row.token_id,
+                market_side=row.market_side,  # type: ignore[arg-type]
+                order_side=row.order_side,  # type: ignore[arg-type]
+                price=row.price,
+                size=row.size,
+                order_type=row.order_type,  # type: ignore[arg-type]
+                post_only=row.post_only,
+                dry_run=row.dry_run,
+                status=row.status,
+                exchange_order_id=row.exchange_order_id,
+                request_payload=row.request_payload,
+                response_payload=row.response_payload,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        ]
+
+    def save_execution_fill(self, fill: ExecutionFillRecord) -> None:
+        if not self._session_factory:
+            return
+        record = ExecutionFillRecordModel(
+            id=fill.fill_id,
+            order_id=fill.order_id,
+            market_id=str(fill.market_id),
+            token_id=fill.token_id,
+            ts=fill.ts,
+            side=fill.side,
+            price=fill.price,
+            size=fill.size,
+            fee=fill.fee,
+            fee_currency=fill.fee_currency,
+            status=fill.status,
+            dry_run=fill.dry_run,
+            source=fill.source,
+            payload=fill.payload,
+        )
+        self._write(record, merge=True)
+
+    def list_execution_fills(self) -> list[ExecutionFillRecord]:
+        if not self._session_factory:
+            return []
+        with self._session_factory() as session:
+            rows = session.query(ExecutionFillRecordModel).order_by(ExecutionFillRecordModel.ts.desc()).all()
+        return [
+            ExecutionFillRecord(
+                fill_id=row.id,
+                order_id=row.order_id,
+                market_id=UUID(row.market_id),
+                token_id=row.token_id,
+                ts=row.ts,
+                side=row.side,  # type: ignore[arg-type]
+                price=row.price,
+                size=row.size,
+                fee=row.fee,
+                fee_currency=row.fee_currency,
+                status=row.status,
+                dry_run=row.dry_run,
+                source=row.source,
+                payload=row.payload,
             )
             for row in rows
         ]

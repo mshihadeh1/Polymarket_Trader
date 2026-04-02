@@ -159,6 +159,49 @@ class PaperDecisionRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
 
 
+class ExecutionOrderRecord(Base):
+    __tablename__ = "execution_orders_cache"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    intent_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    strategy_name: Mapped[str] = mapped_column(String, nullable=False)
+    market_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    token_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    market_side: Mapped[str] = mapped_column(String, nullable=False)
+    order_side: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    size: Mapped[float] = mapped_column(Float, nullable=False)
+    order_type: Mapped[str] = mapped_column(String, nullable=False)
+    post_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    exchange_order_id: Mapped[str | None] = mapped_column(String)
+    request_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    response_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+
+class ExecutionFillRecord(Base):
+    __tablename__ = "execution_fills_cache"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    order_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    market_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    token_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    side: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    size: Mapped[float] = mapped_column(Float, nullable=False)
+    fee: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    fee_currency: Mapped[str | None] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="filled", nullable=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    source: Mapped[str] = mapped_column(String, default="paper", nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+
 class PolymarketMarketRecord(Base):
     __tablename__ = "polymarket_market_cache"
 
