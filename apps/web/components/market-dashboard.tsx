@@ -1,14 +1,11 @@
 import Link from "next/link";
 
 import {
-  fetchClosedMarketResults,
+  fetchDashboardSummary,
   fetchMarkets,
   fetchPaperBlotter,
-  fetchSystemHealth,
-  findLatestClosedMarketReport,
-  type ClosedMarketBatchReport,
+  type DashboardResearchSlice,
 } from "../lib/api";
-import { buildEdgeSlice } from "../lib/edge";
 import { formatLosAngelesDateTime, losAngelesTimeZoneLabel } from "../lib/time";
 
 function formatTime(value?: string): string {
@@ -19,46 +16,25 @@ function dashboardHitRateLabel(hitRate: number, sampleSize: number): string {
   return sampleSize ? `${(hitRate * 100).toFixed(1)}%` : "n/a";
 }
 
-function emptyBatchReport(mode: ClosedMarketBatchReport["mode"]): ClosedMarketBatchReport {
-  return {
-    run_id: `ui-empty-${mode}`,
-    strategy_name: "combined_cvd_gap",
-    mode,
-    asset_filter: "BTC",
-    timeframe_filter: undefined,
-    limit: 0,
-    created_at: undefined,
-    total_markets_evaluated: 0,
-    metrics: [],
-    coverage: {
-      bars_only: 0,
-      bars_plus_trades: 0,
-      bars_plus_trades_plus_orderbook: 0,
-    },
-    records: [],
-  };
-}
-
 export async function MarketDashboard() {
-  const [markets, blotter, health, results] = await Promise.all([
+  const [markets, blotter, summary] = await Promise.all([
     fetchMarkets(),
     fetchPaperBlotter(),
-    fetchSystemHealth(),
-    fetchClosedMarketResults(),
+    fetchDashboardSummary(),
   ]);
-  const btcComparison = {
-    bars_only: findLatestClosedMarketReport(results, { mode: "bars_only", asset: "BTC" }) ?? emptyBatchReport("bars_only"),
-    bars_plus_hyperliquid:
-      findLatestClosedMarketReport(results, { mode: "bars_plus_hyperliquid", asset: "BTC" }) ?? emptyBatchReport("bars_plus_hyperliquid"),
-  };
   const liveMarkets = markets.filter((market) => market.status === "active");
   const crypto5m = markets.filter((market) => market.market_type === "crypto_5m").length;
   const crypto15m = markets.filter((market) => market.market_type === "crypto_15m").length;
   const btc5mMarket = markets.find((market) => market.underlying === "BTC" && market.market_type === "crypto_5m");
   const btc15mMarket = markets.find((market) => market.underlying === "BTC" && market.market_type === "crypto_15m");
-  const observation = health.polymarket_observation;
-  const btc5mEdge = buildEdgeSlice(btcComparison.bars_plus_hyperliquid, "crypto_5m");
-  const btc15mEdge = buildEdgeSlice(btcComparison.bars_plus_hyperliquid, "crypto_15m");
+  const observation = summary.observation;
+  const execution = summary.execution;
+  const paper = summary.paper;
+  const btc5mBars = summary.research_slices.find((slice) => slice.timeframe === "crypto_5m" && slice.mode === "bars_only");
+  const btc5mEnriched = summary.research_slices.find((slice) => slice.timeframe === "crypto_5m" && slice.mode === "bars_plus_hyperliquid");
+  const btc15mBars = summary.research_slices.find((slice) => slice.timeframe === "crypto_15m" && slice.mode === "bars_only");
+  const btc15mEnriched = summary.research_slices.find((slice) => slice.timeframe === "crypto_15m" && slice.mode === "bars_plus_hyperliquid");
+  const selectedResearch: DashboardResearchSlice[] = summary.research_slices;
 
   return (
     <div className="page-grid page-shell">
@@ -74,10 +50,10 @@ export async function MarketDashboard() {
                   <span className="accent-text">research terminal</span>
                 </h1>
                 <div className="badge-stack">
-                  <span className={`badge ${health.mock_polymarket ? "badge-mock" : "badge-real"}`}>
-                    {health.mock_polymarket ? "mock venue" : "real venue"}
+                  <span className={`badge ${summary.source_mode === "mock" ? "badge-mock" : "badge-real"}`}>
+                    {summary.source_mode === "mock" ? "mock venue" : "real venue"}
                   </span>
-                  <span className="badge badge-provider">{health.polymarket_client}</span>
+                  <span className="badge badge-provider">{summary.polymarket_client}</span>
                 </div>
               </div>
               <p className="muted">
@@ -95,21 +71,21 @@ export async function MarketDashboard() {
           <div className="stack">
             <div className="metric-card">
               <span className="metric-label">Venue state</span>
-              <span className="metric-value">{health.status}</span>
+              <span className="metric-value">{summary.observation.websocket_connected ? "Live observation" : "Starting"}</span>
               <span className="muted">Clear source badges show when the desk is in mock mode versus a real venue path.</span>
             </div>
             <div className="kpi-strip">
               <div className="kpi">
                 <span className="metric-label">Markets loaded</span>
-                <strong>{health.markets_loaded}</strong>
+                <strong>{markets.length}</strong>
               </div>
               <div className="kpi">
                 <span className="metric-label">Source mode</span>
-                <strong>{health.mock_polymarket ? "Mock" : "Real"}</strong>
+                <strong>{summary.source_mode === "mock" ? "Mock" : "Real"}</strong>
               </div>
               <div className="kpi">
                 <span className="metric-label">External provider</span>
-                <strong>{health.external_historical_provider}</strong>
+                <strong>{summary.historical_provider}</strong>
               </div>
               <div className="kpi">
                 <span className="metric-label">Paper fills</span>
@@ -134,15 +110,15 @@ export async function MarketDashboard() {
         <div className="stack">
             <div className="signal-card">
               <span className="metric-label">Polymarket client</span>
-              <strong>{health.polymarket_client}</strong>
+              <strong>{summary.polymarket_client}</strong>
               <div className="badge-stack">
-                <span className={`badge ${health.mock_polymarket ? "badge-mock" : "badge-live"}`}>
-                  {health.mock_polymarket ? "mock feed" : "live feed"}
+                <span className={`badge ${summary.source_mode === "mock" ? "badge-mock" : "badge-live"}`}>
+                  {summary.source_mode === "mock" ? "mock feed" : "live feed"}
                 </span>
-                <span className={`badge ${health.mock_external_provider ? "badge-mock" : "badge-historical"}`}>
-                  {health.mock_external_provider ? "mock history" : "historical provider"}
+                <span className="badge badge-provider">{summary.historical_provider}</span>
+                <span className={`badge ${summary.execution.enabled ? "badge-live" : "badge-pending"}`}>
+                  {summary.execution.enabled ? "execution ready" : "execution guarded"}
                 </span>
-                <span className="badge badge-provider">{health.external_historical_provider}</span>
               </div>
             </div>
           <div className="signal-card">
@@ -166,29 +142,33 @@ export async function MarketDashboard() {
 
       <section className="panel">
         <div className="section-head">
-          <h2>BTC edge board</h2>
-          <p className="muted">Closed-market evidence for whether the model has an edge on the 5m and 15m BTC up/down contracts.</p>
+          <h2>Research edge board</h2>
+          <p className="muted">Separate bars-only baseline from bars + Hyperliquid enrichment, with 5m and 15m tracked independently.</p>
         </div>
         <div className="stack">
           <Link className="list-card" href="/backtests?asset=BTC&timeframe=crypto_5m&limit=24">
             <div className="badge-stack">
-              <span className={`badge ${btc5mEdge.tone === "positive" ? "badge-positive" : btc5mEdge.tone === "negative" ? "badge-negative" : btc5mEdge.tone === "warning" ? "badge-historical" : "badge-pending"}`}>
-                {btc5mEdge.verdict}
+              <span className={`badge ${(btc5mEnriched?.tone ?? "neutral") === "positive" ? "badge-positive" : (btc5mEnriched?.tone ?? "neutral") === "negative" ? "badge-negative" : (btc5mEnriched?.tone ?? "neutral") === "warning" ? "badge-historical" : "badge-pending"}`}>
+                {btc5mEnriched?.verdict ?? "No data"}
               </span>
               <span className="badge badge-type">BTC 5m</span>
             </div>
-            <strong>{dashboardHitRateLabel(btc5mEdge.hitRate, btc5mEdge.sampleSize)} hit rate over {btc5mEdge.sampleSize} closed markets</strong>
-            <span className="muted">{btc5mEdge.summary}</span>
+            <strong>{dashboardHitRateLabel(btc5mEnriched?.hitRate ?? 0, btc5mEnriched?.sampleSize ?? 0)} hit rate over {btc5mEnriched?.sampleSize ?? 0} closed markets</strong>
+            <span className="muted">
+              bars-only {dashboardHitRateLabel(btc5mBars?.hitRate ?? 0, btc5mBars?.sampleSize ?? 0)} | enriched {dashboardHitRateLabel(btc5mEnriched?.hitRate ?? 0, btc5mEnriched?.sampleSize ?? 0)}
+            </span>
           </Link>
           <Link className="list-card" href="/backtests?asset=BTC&timeframe=crypto_15m&limit=24">
             <div className="badge-stack">
-              <span className={`badge ${btc15mEdge.tone === "positive" ? "badge-positive" : btc15mEdge.tone === "negative" ? "badge-negative" : btc15mEdge.tone === "warning" ? "badge-historical" : "badge-pending"}`}>
-                {btc15mEdge.verdict}
+              <span className={`badge ${(btc15mEnriched?.tone ?? "neutral") === "positive" ? "badge-positive" : (btc15mEnriched?.tone ?? "neutral") === "negative" ? "badge-negative" : (btc15mEnriched?.tone ?? "neutral") === "warning" ? "badge-historical" : "badge-pending"}`}>
+                {btc15mEnriched?.verdict ?? "No data"}
               </span>
               <span className="badge badge-type">BTC 15m</span>
             </div>
-            <strong>{dashboardHitRateLabel(btc15mEdge.hitRate, btc15mEdge.sampleSize)} hit rate over {btc15mEdge.sampleSize} closed markets</strong>
-            <span className="muted">{btc15mEdge.summary}</span>
+            <strong>{dashboardHitRateLabel(btc15mEnriched?.hitRate ?? 0, btc15mEnriched?.sampleSize ?? 0)} hit rate over {btc15mEnriched?.sampleSize ?? 0} closed markets</strong>
+            <span className="muted">
+              bars-only {dashboardHitRateLabel(btc15mBars?.hitRate ?? 0, btc15mBars?.sampleSize ?? 0)} | enriched {dashboardHitRateLabel(btc15mEnriched?.hitRate ?? 0, btc15mEnriched?.sampleSize ?? 0)}
+            </span>
           </Link>
           <Link className="terminal-link" href="/backtests?asset=BTC&timeframe=all&limit=24">Open full edge workspace</Link>
         </div>
@@ -241,8 +221,70 @@ export async function MarketDashboard() {
             <span className="metric-label">Selected markets</span>
             <strong>{observation.selected_market_count}</strong>
             <span className="muted">Assets subscribed: {observation.selected_asset_count}</span>
+            <span className="muted">Signals {paper.signal_count} | simulated fills {paper.simulated_fill_count} | fill rate {(paper.fill_rate * 100).toFixed(1)}%</span>
           </div>
         </div>
+      </section>
+
+      <section className="panel span-2">
+        <div className="section-head">
+          <h2>Execution and paper quality</h2>
+          <p className="muted">Separate the live routing scaffold from the dry-run paper loop.</p>
+        </div>
+        <div className="edge-card-grid">
+          <div className="metric-card">
+            <span className="metric-label">Paper win rate proxy</span>
+            <span className="metric-value">{(paper.fill_rate * 100).toFixed(1)}%</span>
+            <span className="muted">Simulated fills divided by live paper signals.</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Paper cycles</span>
+            <span className="metric-value">{paper.cycle_count}</span>
+            <span className="muted">Continuous loop iterations observed.</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Execution fill rate</span>
+            <span className="metric-value">{(execution.fill_rate * 100).toFixed(1)}%</span>
+            <span className="muted">{execution.fill_count} fills across {execution.order_count} orders.</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Execution mode</span>
+            <span className="metric-value">{execution.enabled ? "Ready" : "Guarded"}</span>
+            <span className="muted">{execution.message || "No message"}</span>
+          </div>
+        </div>
+        {selectedResearch.length ? (
+          <div className="table-wrap" style={{ marginTop: "1rem" }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Timeframe</th>
+                  <th>Mode</th>
+                  <th>Hit rate</th>
+                  <th>Edge</th>
+                  <th>Avg conf</th>
+                  <th>Contract score</th>
+                  <th>Verdict</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedResearch.map((slice) => (
+                  <tr key={`${slice.timeframe}-${slice.mode}`}>
+                    <td>{slice.timeframe}</td>
+                    <td>{slice.mode}</td>
+                    <td>{dashboardHitRateLabel(slice.hit_rate, slice.sample_size)}</td>
+                    <td>{slice.edge_over_50.toFixed(1)} pts</td>
+                    <td>{(slice.avg_confidence * 100).toFixed(1)}%</td>
+                    <td>{slice.contract_score.toFixed(0)}</td>
+                    <td>{slice.verdict}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty-state">No research slices stored yet.</div>
+        )}
       </section>
 
       <section className="panel span-2">

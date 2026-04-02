@@ -34,6 +34,8 @@ class PaperTraderService:
         self._latest_signals: dict[str, PaperSignalSnapshot] = {}
         self._positions: dict[str, PaperPosition] = {}
         self._realized_pnl = 0.0
+        self._signal_count = 0
+        self._simulated_fill_count = 0
         self._cycle_count = 0
         self._last_update_at: datetime | None = None
         self._loop_error: str | None = None
@@ -44,6 +46,8 @@ class PaperTraderService:
         self._latest_signals.clear()
         self._positions.clear()
         self._realized_pnl = 0.0
+        self._signal_count = 0
+        self._simulated_fill_count = 0
         self._cycle_count = 0
         self._last_update_at = None
         self._loop_error = None
@@ -62,6 +66,9 @@ class PaperTraderService:
             dry_run_only=not self._settings.live_execution_enabled,
             active_market_ids=[market.id for market in self._state.markets.values()],
             selected_market_ids=selected_market_ids,
+            signal_count=self._signal_count,
+            simulated_fill_count=self._simulated_fill_count,
+            fill_rate=(self._simulated_fill_count / self._signal_count) if self._signal_count else 0.0,
             open_positions=open_positions,
             position_details=list(self._positions.values()),
             latest_signals=sorted(self._latest_signals.values(), key=lambda item: item.ts, reverse=True),
@@ -161,6 +168,7 @@ class PaperTraderService:
             fair_value_gap=snapshot.fair_value_gap,
             midpoint=midpoint,
         )
+        self._signal_count += 1
         paper_decision = PaperTradeDecision(
             ts=snapshot.ts,
             market_id=snapshot.market_id,
@@ -174,6 +182,8 @@ class PaperTraderService:
             confidence=decision.confidence,
         )
         self._apply_decision(paper_decision)
+        if paper_decision.status == "simulated_fill":
+            self._simulated_fill_count += 1
         self._state.paper_decisions.append(paper_decision)
         self._last_decision = paper_decision
         if self._persistence is not None:

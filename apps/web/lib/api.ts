@@ -269,6 +269,9 @@ export type PaperStatus = {
   dry_run_only: boolean;
   active_market_ids: string[];
   selected_market_ids: string[];
+  signal_count: number;
+  simulated_fill_count: number;
+  fill_rate: number;
   open_positions: Record<string, number>;
   position_details: {
     market_id: string;
@@ -325,6 +328,54 @@ export type PolymarketObservationStatus = {
   selected_market_count: number;
   selected_asset_count: number;
   last_error?: string | null;
+};
+
+export type DashboardBucketStat = {
+  bucket: string;
+  sample_size: number;
+  hit_rate: number;
+  edge_over_50: number;
+};
+
+export type DashboardResearchSlice = {
+  timeframe: string;
+  mode: "bars_only" | "bars_plus_hyperliquid";
+  sample_size: number;
+  hit_rate: number;
+  edge_over_50: number;
+  avg_confidence: number;
+  contract_score: number;
+  verdict: string;
+  tone: "positive" | "negative" | "warning" | "neutral";
+  confidence_buckets: DashboardBucketStat[];
+  hour_buckets: DashboardBucketStat[];
+};
+
+export type ExecutionStatus = {
+  enabled: boolean;
+  dry_run_default: boolean;
+  live_execution_enabled: boolean;
+  adapter_name?: string | null;
+  order_count: number;
+  open_order_count: number;
+  fill_count: number;
+  fill_rate: number;
+  last_order_at?: string | null;
+  last_fill_at?: string | null;
+  last_error?: string | null;
+  message?: string | null;
+};
+
+export type DashboardSummary = {
+  generated_at: string;
+  source_mode: "mock" | "real";
+  historical_provider: string;
+  polymarket_client: string;
+  observation: PolymarketObservationStatus;
+  paper: PaperStatus;
+  execution: ExecutionStatus;
+  research_slices: DashboardResearchSlice[];
+  notes: string[];
 };
 
 const baseUrl =
@@ -790,6 +841,26 @@ export async function fetchPaperStatus(): Promise<PaperStatus> {
   });
   if (!response.ok) {
     throw new Error("Failed to fetch paper trading status");
+  }
+  return response.json();
+}
+
+export async function fetchExecutionStatus(): Promise<ExecutionStatus> {
+  const response = await fetch(`${baseUrl}/api/v1/execution/status`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch execution status");
+  }
+  return response.json();
+}
+
+export async function fetchDashboardSummary(): Promise<DashboardSummary> {
+  const response = await fetch(`${baseUrl}/api/v1/dashboard/summary`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch dashboard summary");
   }
   return response.json();
 }

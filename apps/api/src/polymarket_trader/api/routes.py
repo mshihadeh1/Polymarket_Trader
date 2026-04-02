@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException, Query
 
 from polymarket_trader.bootstrap import Container
-from packages.core_types.schemas import ExecutionOrderIntent
+from packages.core_types.schemas import DashboardSummary, ExecutionOrderIntent
 from packages.utils.time import parse_dt
 
 
@@ -373,5 +375,25 @@ def build_router(container: Container) -> APIRouter:
             "dataset_validation": list(container.state.external_dataset_validation.values()),
             "external_provider_capabilities": container.external_market_data_provider.capabilities(),
         }
+
+    @router.get("/dashboard/summary", response_model=DashboardSummary)
+    def dashboard_summary():
+        research = container.backtester.dashboard_research_slices(asset="BTC")
+        paper = container.paper_trader.status()
+        execution = container.execution_engine.status()
+        return DashboardSummary(
+            generated_at=datetime.now(timezone.utc),
+            source_mode="mock" if container.polymarket_client.is_mock else "real",
+            historical_provider=container.settings.external_historical_provider,
+            polymarket_client=container.polymarket_client.client_name,
+            observation=container.state.polymarket_observation,
+            paper=paper,
+            execution=execution,
+            research_slices=research,
+            notes=[
+                "Backtest evidence is bar-based and closed-market based, not a historical Polymarket trade replay.",
+                "Paper mode is dry-run unless live execution is explicitly enabled.",
+            ],
+        )
 
     return router

@@ -15,6 +15,8 @@ from packages.core_types.schemas import (
     BacktestTrade,
     ClosedMarketBatchReport,
     ClosedMarketEvaluationRecord,
+    DashboardBucketStat,
+    DashboardResearchSlice,
     EquityPoint,
     FeatureAvailability,
     MarketDetail,
@@ -71,6 +73,27 @@ class BacktesterService:
                 merged.setdefault(report.run_id, report)
             reports = list(merged.values())
         return sorted(reports, key=_report_sort_key, reverse=True)
+
+    def dashboard_research_slices(self, *, asset: str = "BTC") -> list[DashboardResearchSlice]:
+        reports = [
+            report
+            for report in self.list_closed_market_batch_reports()
+            if (report.asset_filter or asset).upper() == asset.upper()
+        ]
+        latest_by_key: dict[tuple[str, str], ClosedMarketBatchReport] = {}
+        for report in reports:
+            key = (report.mode, report.timeframe_filter or "all")
+            latest_by_key.setdefault(key, report)
+
+        slices: list[DashboardResearchSlice] = []
+        for timeframe in ("crypto_5m", "crypto_15m"):
+            for mode in ("bars_only", "bars_plus_hyperliquid"):
+                report = latest_by_key.get((mode, timeframe))
+                if report is None:
+                    continue
+                slice_metrics = _build_dashboard_slice(report, timeframe)
+                slices.append(slice_metrics)
+        return slices
 
     async def _closed_market_candidates(self, *, limit: int) -> list[tuple[dict, PolymarketMarketMetadata]]:
         closed_markets = [
@@ -733,6 +756,45 @@ def _build_market_detail(raw_market: dict, metadata, *, asset: str, timeframe: s
     )
 
 
+def _build_dashboard_slice(report: ClosedMarketBatchReport, timeframe: str) -> DashboardResearchSlice:
+    sample_size = report.total_markets_evaluated
+    hit_rate = _metric_value(report, "accuracy")
+    avg_confidence = _metric_value(report, "average_confidence")
+    contract_score = _metric_value(report, "simple_contract_score")
+    edge_over_50 = hit_rate * 100 - 50.0
+    tone = "neutral"
+    verdict = "No proven edge yet"
+    if sample_size:
+        if hit_rate >= 0.55:
+            tone = "positive"
+            verdict = "Strong edge"
+        elif hit_rate >= 0.52:
+            tone = "warning"
+            verdict = "Building edge"
+        elif hit_rate < 0.48:
+            tone = "negative"
+            verdict = "No edge"
+        else:
+            tone = "warning"
+            verdict = "Mixed edge"
+
+    confidence_buckets = _bucket_performance(report.records, lambda record: _confidence_bucket(record.final_confidence))
+    hour_buckets = _bucket_performance(report.records, lambda record: _hour_bucket(record.market_close_time))
+    return DashboardResearchSlice(
+        timeframe=timeframe,
+        mode=report.mode,
+        sample_size=sample_size,
+        hit_rate=hit_rate,
+        edge_over_50=edge_over_50,
+        avg_confidence=avg_confidence,
+        contract_score=contract_score,
+        verdict=verdict,
+        tone=tone,  # type: ignore[arg-type]
+        confidence_buckets=confidence_buckets,
+        hour_buckets=hour_buckets,
+    )
+
+
 def _extract_open_reference(raw_market: dict, metadata) -> float | None:
     for key in ("open_reference_price", "referencePrice", "openPrice"):
         value = raw_market.get(key)
@@ -764,6 +826,51 @@ def _ratio(numerator: int, denominator: int) -> float:
 def _average(values) -> float:
     values = list(values)
     return sum(values) / len(values) if values else 0.0
+
+
+def _metric_value(report: ClosedMarketBatchReport, label: str) -> float:
+    for metric in report.metrics:
+        if metric.label == label:
+            return metric.value
+    return 0.0
+
+
+def _bucket_performance(records: list[ClosedMarketEvaluationRecord], bucket_fn) -> list[DashboardBucketStat]:
+    grouped: dict[str, list[ClosedMarketEvaluationRecord]] = {}
+    for record in records:
+        if record.correctness is None:
+            continue
+        bucket = bucket_fn(record)
+        grouped.setdefault(bucket, []).append(record)
+    stats: list[DashboardBucketStat] = []
+    for bucket, bucket_records in sorted(grouped.items()):
+        sample_size = len(bucket_records)
+        hit_rate = _ratio(sum(1 for record in bucket_records if record.correctness), sample_size)
+        stats.append(
+            DashboardBucketStat(
+                bucket=bucket,
+                sample_size=sample_size,
+                hit_rate=hit_rate,
+                edge_over_50=hit_rate * 100 - 50.0,
+            )
+        )
+    return stats
+
+
+def _confidence_bucket(confidence: float) -> str:
+    if confidence >= 0.8:
+        return "0.8-1.0"
+    if confidence >= 0.7:
+        return "0.7-0.8"
+    if confidence >= 0.6:
+        return "0.6-0.7"
+    if confidence >= 0.5:
+        return "0.5-0.6"
+    return "<0.5"
+
+
+def _hour_bucket(ts: datetime) -> str:
+    return f"{ts.hour:02d}:00"
 
 
 def _accuracy_for(records: list[ClosedMarketEvaluationRecord], *, timeframe: str | None = None, asset: str | None = None) -> float:

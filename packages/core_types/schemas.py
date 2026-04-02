@@ -588,6 +588,9 @@ class PaperTradingStatus(BaseModel):
     dry_run_only: bool
     active_market_ids: list[UUID]
     selected_market_ids: list[UUID] = Field(default_factory=list)
+    signal_count: int = 0
+    simulated_fill_count: int = 0
+    fill_rate: float = 0.0
     open_positions: dict[str, float] = Field(default_factory=dict)
     position_details: list[PaperPosition] = Field(default_factory=list)
     latest_signals: list[PaperSignalSnapshot] = Field(default_factory=list)
@@ -666,9 +669,44 @@ class ExecutionStatus(BaseModel):
     dry_run_default: bool = True
     live_execution_enabled: bool = False
     adapter_name: str | None = None
+    order_count: int = 0
     open_order_count: int = 0
     fill_count: int = 0
+    fill_rate: float = 0.0
     last_order_at: datetime | None = None
     last_fill_at: datetime | None = None
     last_error: str | None = None
     message: str | None = None
+
+
+class DashboardBucketStat(BaseModel):
+    bucket: str
+    sample_size: int
+    hit_rate: float
+    edge_over_50: float
+
+
+class DashboardResearchSlice(BaseModel):
+    timeframe: str
+    mode: Literal["bars_only", "bars_plus_hyperliquid"]
+    sample_size: int
+    hit_rate: float
+    edge_over_50: float
+    avg_confidence: float
+    contract_score: float
+    verdict: str
+    tone: Literal["positive", "negative", "warning", "neutral"]
+    confidence_buckets: list[DashboardBucketStat] = Field(default_factory=list)
+    hour_buckets: list[DashboardBucketStat] = Field(default_factory=list)
+
+
+class DashboardSummary(BaseModel):
+    generated_at: datetime
+    source_mode: Literal["mock", "real"]
+    historical_provider: str
+    polymarket_client: str
+    observation: PolymarketObservationStatus
+    paper: PaperTradingStatus
+    execution: ExecutionStatus
+    research_slices: list[DashboardResearchSlice] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)

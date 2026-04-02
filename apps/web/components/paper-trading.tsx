@@ -1,10 +1,11 @@
-import { fetchPaperBlotter, fetchPaperStatus } from "../lib/api";
+import { fetchExecutionStatus, fetchPaperBlotter, fetchPaperStatus } from "../lib/api";
 import { formatLosAngelesDateTime, losAngelesTimeZoneLabel } from "../lib/time";
 
 export async function PaperTradingPanel() {
-  const [status, blotter] = await Promise.all([
+  const [status, blotter, execution] = await Promise.all([
     fetchPaperStatus(),
     fetchPaperBlotter(),
+    fetchExecutionStatus(),
   ]);
 
   return (
@@ -22,28 +23,32 @@ export async function PaperTradingPanel() {
           <p className="muted">Dry-run only. Live execution remains opt-in and disabled.</p>
           <p className="muted">Times shown in {losAngelesTimeZoneLabel()}.</p>
         </div>
-        <div className="quad-grid">
-          <div className="metric-card">
-            <span className="metric-label">Strategy</span>
-            <span className="metric-value">{status.strategy_name}</span>
+          <div className="quad-grid">
+            <div className="metric-card">
+              <span className="metric-label">Strategy</span>
+              <span className="metric-value">{status.strategy_name}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Loop health</span>
+              <span className="metric-value">{status.loop_running ? "Running" : "Stopped"}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Realized PnL</span>
+              <span className="metric-value">{status.realized_pnl.toFixed(2)}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Unrealized PnL</span>
+              <span className="metric-value">{status.unrealized_pnl.toFixed(2)}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Open positions</span>
+              <span className="metric-value">{Object.keys(status.open_positions).length}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Signal fill rate</span>
+              <span className="metric-value">{(status.fill_rate * 100).toFixed(1)}%</span>
+            </div>
           </div>
-          <div className="metric-card">
-            <span className="metric-label">Loop health</span>
-            <span className="metric-value">{status.loop_running ? "Running" : "Stopped"}</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Realized PnL</span>
-            <span className="metric-value">{status.realized_pnl.toFixed(2)}</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Unrealized PnL</span>
-            <span className="metric-value">{status.unrealized_pnl.toFixed(2)}</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Open positions</span>
-            <span className="metric-value">{Object.keys(status.open_positions).length}</span>
-          </div>
-        </div>
       </section>
 
       <section className="panel">
@@ -73,12 +78,43 @@ export async function PaperTradingPanel() {
             <span>{status.cycle_count}</span>
           </div>
           <div className="list-card">
+            <strong>Signals / fills</strong>
+            <span>{status.signal_count} / {status.simulated_fill_count}</span>
+          </div>
+          <div className="list-card">
             <strong>Loop error</strong>
             <span className="table-meta">{status.loop_error || "none"}</span>
           </div>
           <div className="list-card">
             <strong>Open position ids</strong>
             <span className="table-meta">{Object.keys(status.open_positions).join(", ") || "none"}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Execution scaffold</h2>
+          <p className="muted">Live routing remains guarded, but the order ledger is ready for inspection.</p>
+        </div>
+        <div className="stack">
+          <div className="signal-card">
+            <span className="metric-label">Execution mode</span>
+            <strong>{execution.enabled ? "Ready" : "Guarded"}</strong>
+            <div className="badge-stack">
+              <span className={`badge ${execution.enabled ? "badge-live" : "badge-pending"}`}>{execution.live_execution_enabled ? "live enabled" : "dry-run only"}</span>
+              <span className="badge badge-provider">{execution.adapter_name ?? "no adapter"}</span>
+            </div>
+          </div>
+          <div className="signal-card">
+            <span className="metric-label">Orders / fills</span>
+            <strong>{execution.order_count} / {execution.fill_count}</strong>
+            <span className="muted">Fill rate {(execution.fill_rate * 100).toFixed(1)}%</span>
+          </div>
+          <div className="signal-card">
+            <span className="metric-label">Last execution update</span>
+            <strong>{execution.last_order_at ?? execution.last_fill_at ?? "none yet"}</strong>
+            <span className="muted">{execution.message ?? "No execution message"}</span>
           </div>
         </div>
       </section>

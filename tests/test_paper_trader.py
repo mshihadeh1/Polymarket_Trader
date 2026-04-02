@@ -26,3 +26,5 @@ def test_paper_trader_cycle_updates_live_status() -> None:
     assert status.cycle_count == 1
     assert status.last_update_at is not None
     assert status.selected_market_ids
+    assert status.signal_count >= len(decisions)
+    assert status.fill_rate >= 0.0
