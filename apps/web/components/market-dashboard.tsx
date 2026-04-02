@@ -16,6 +16,78 @@ function dashboardHitRateLabel(hitRate: number, sampleSize: number): string {
   return sampleSize ? `${(hitRate * 100).toFixed(1)}%` : "n/a";
 }
 
+function formatSignedPercent(value: number): string {
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${value.toFixed(1)} pts`;
+}
+
+function rollingEdgePath(points: { rolling_edge_over_50: number }[]): string {
+  if (points.length < 2) return "";
+  const values = points.map((point) => point.rolling_edge_over_50);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const width = 620;
+  const height = 150;
+  return points
+    .map((point, index) => {
+      const x = (index / (points.length - 1)) * width;
+      const y = height - ((point.rolling_edge_over_50 - min) / range) * height;
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+function renderRollingEdgeChart(points: { ts: string; timeframe: string; rolling_edge_over_50: number; edge_over_50: number; mode: string }[]) {
+  if (!points.length) {
+    return <div className="empty-state">No rolling edge series available yet.</div>;
+  }
+  const latest = points[points.length - 1];
+  const path = rollingEdgePath(points);
+  const values = points.map((point) => point.rolling_edge_over_50);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const width = 620;
+  const height = 150;
+  const ticks = 4;
+  return (
+    <div className="stack">
+      <div className="badge-stack">
+        <span className="badge badge-type">{latest.mode}</span>
+        <span className="badge badge-provider">{latest.timeframe}</span>
+        <span className="badge badge-historical">latest {formatSignedPercent(latest.edge_over_50)}</span>
+        <span className="badge badge-live">rolling {latest.rolling_edge_over_50.toFixed(1)} pts</span>
+      </div>
+      <div className="chart-frame">
+        <svg viewBox={`0 0 ${width} ${height}`} className="edge-chart" role="img" aria-label="Rolling edge over time">
+          <defs>
+            <linearGradient id="edgeLineGradient" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="#22d3ee" />
+              <stop offset="50%" stopColor="#8b5cf6" />
+              <stop offset="100%" stopColor="#f472b6" />
+            </linearGradient>
+            <linearGradient id="edgeFillGradient" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#0f172a" stopOpacity="0.05" />
+            </linearGradient>
+          </defs>
+          {[...Array(ticks + 1)].map((_, index) => {
+            const y = (height / ticks) * index;
+            return <line key={y} x1="0" x2={width} y1={y} y2={y} className="chart-grid-line" />;
+          })}
+          <path d={`${path} L ${width} ${height} L 0 ${height} Z`} className="edge-chart-fill" />
+          <path d={path} className="edge-chart-line" />
+        </svg>
+        <div className="chart-axis">
+          <span>{min.toFixed(1)} pts</span>
+          <span>{max.toFixed(1)} pts</span>
+        </div>
+      </div>
+      <div className="table-meta">Series points: {points.length} | latest {latest.ts}</div>
+    </div>
+  );
+}
+
 export async function MarketDashboard() {
   const [markets, blotter, summary] = await Promise.all([
     fetchMarkets(),
@@ -285,6 +357,14 @@ export async function MarketDashboard() {
         ) : (
           <div className="empty-state">No research slices stored yet.</div>
         )}
+      </section>
+
+      <section className="panel span-2">
+        <div className="section-head">
+          <h2>Rolling edge</h2>
+          <p className="muted">Rolling average edge over time for stored BTC closed-market batches.</p>
+        </div>
+        {renderRollingEdgeChart(summary.rolling_edge_series)}
       </section>
 
       <section className="panel span-2">

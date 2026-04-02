@@ -16,6 +16,7 @@ from packages.core_types.schemas import (
     ClosedMarketBatchReport,
     ClosedMarketEvaluationRecord,
     DashboardBucketStat,
+    DashboardEdgePoint,
     DashboardResearchSlice,
     EquityPoint,
     FeatureAvailability,
@@ -94,6 +95,34 @@ class BacktesterService:
                 slice_metrics = _build_dashboard_slice(report, timeframe)
                 slices.append(slice_metrics)
         return slices
+
+    def dashboard_rolling_edge_series(self, *, asset: str = "BTC", mode: str = "bars_plus_hyperliquid") -> list[DashboardEdgePoint]:
+        reports = [
+            report
+            for report in self.list_closed_market_batch_reports()
+            if (report.asset_filter or asset).upper() == asset.upper()
+            and report.mode == mode
+            and report.created_at is not None
+        ]
+        reports.sort(key=lambda report: report.created_at or datetime.min.replace(tzinfo=timezone.utc))
+        cumulative_edge = 0.0
+        series: list[DashboardEdgePoint] = []
+        for index, report in enumerate(reports, start=1):
+            hit_rate = _metric_value(report, "accuracy")
+            edge_over_50 = hit_rate * 100 - 50.0
+            cumulative_edge += edge_over_50
+            series.append(
+                DashboardEdgePoint(
+                    ts=report.created_at or datetime.now(timezone.utc),
+                    timeframe=report.timeframe_filter or "all",
+                    mode=report.mode,
+                    sample_size=report.total_markets_evaluated,
+                    hit_rate=hit_rate,
+                    edge_over_50=edge_over_50,
+                    rolling_edge_over_50=cumulative_edge / index,
+                )
+            )
+        return series
 
     async def _closed_market_candidates(self, *, limit: int) -> list[tuple[dict, PolymarketMarketMetadata]]:
         closed_markets = [

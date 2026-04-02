@@ -686,6 +686,16 @@ class DashboardBucketStat(BaseModel):
     edge_over_50: float
 
 
+class DashboardEdgePoint(BaseModel):
+    ts: datetime
+    timeframe: str
+    mode: Literal["bars_only", "bars_plus_hyperliquid"]
+    sample_size: int
+    hit_rate: float
+    edge_over_50: float
+    rolling_edge_over_50: float
+
+
 class DashboardResearchSlice(BaseModel):
     timeframe: str
     mode: Literal["bars_only", "bars_plus_hyperliquid"]
@@ -709,4 +719,5 @@ class DashboardSummary(BaseModel):
     paper: PaperTradingStatus
     execution: ExecutionStatus
     research_slices: list[DashboardResearchSlice] = Field(default_factory=list)
+    rolling_edge_series: list[DashboardEdgePoint] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)

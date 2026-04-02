@@ -351,6 +351,16 @@ export type DashboardResearchSlice = {
   hour_buckets: DashboardBucketStat[];
 };
 
+export type DashboardEdgePoint = {
+  ts: string;
+  timeframe: string;
+  mode: "bars_only" | "bars_plus_hyperliquid";
+  sample_size: number;
+  hit_rate: number;
+  edge_over_50: number;
+  rolling_edge_over_50: number;
+};
+
 export type ExecutionStatus = {
   enabled: boolean;
   dry_run_default: boolean;
@@ -375,6 +385,7 @@ export type DashboardSummary = {
   paper: PaperStatus;
   execution: ExecutionStatus;
   research_slices: DashboardResearchSlice[];
+  rolling_edge_series: DashboardEdgePoint[];
   notes: string[];
 };
 

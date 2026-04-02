@@ -379,6 +379,7 @@ def build_router(container: Container) -> APIRouter:
     @router.get("/dashboard/summary", response_model=DashboardSummary)
     def dashboard_summary():
         research = container.backtester.dashboard_research_slices(asset="BTC")
+        rolling_edge = container.backtester.dashboard_rolling_edge_series(asset="BTC")
         paper = container.paper_trader.status()
         execution = container.execution_engine.status()
         return DashboardSummary(
@@ -390,6 +391,7 @@ def build_router(container: Container) -> APIRouter:
             paper=paper,
             execution=execution,
             research_slices=research,
+            rolling_edge_series=rolling_edge,
             notes=[
                 "Backtest evidence is bar-based and closed-market based, not a historical Polymarket trade replay.",
                 "Paper mode is dry-run unless live execution is explicitly enabled.",

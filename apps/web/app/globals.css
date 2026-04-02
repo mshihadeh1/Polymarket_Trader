@@ -520,6 +520,51 @@ pre,
   color: var(--teal);
 }
 
+.chart-frame {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(135, 163, 232, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%),
+    rgba(6, 12, 25, 0.56);
+}
+
+.edge-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.chart-grid-line {
+  stroke: rgba(145, 169, 220, 0.1);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.edge-chart-line {
+  fill: none;
+  stroke: url(#edgeLineGradient);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 14px rgba(139, 92, 246, 0.34));
+}
+
+.edge-chart-fill {
+  fill: url(#edgeFillGradient);
+  stroke: none;
+}
+
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--subtle);
+  font-size: 0.8rem;
+}
+
 .timeline-controls {
   display: flex;
   flex-wrap: wrap;
