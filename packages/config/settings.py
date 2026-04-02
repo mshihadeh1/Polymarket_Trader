@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     paper_trading_underlyings: str = Field(default="BTC", alias="PAPER_TRADING_UNDERLYINGS")
     paper_trading_market_types: str = Field(default="crypto_5m,crypto_15m", alias="PAPER_TRADING_MARKET_TYPES")
     paper_trading_strategy: str = Field(default="combined_cvd_gap", alias="PAPER_TRADING_STRATEGY")
+    mock_startup_demo_enabled: bool = Field(default=False, alias="MOCK_STARTUP_DEMO_ENABLED")
 
 
 @lru_cache

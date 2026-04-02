@@ -94,6 +94,13 @@ class Container:
         self.hyperliquid_ingestor.bootstrap()
         for market_id in self.state.markets:
             self.feature_engine.compute_snapshot(market_id)
+        if self.settings.mock_startup_demo_enabled and self.polymarket_client.is_mock:
+            if not self.backtester.list_closed_market_batch_reports():
+                logger.info("Running mock startup closed-market demo batch")
+                await self.backtester.run_closed_market_comparison(asset="BTC", timeframe=None, limit=10, strategy_name="combined_cvd_gap")
+            if not self.paper_trader.blotter():
+                logger.info("Running mock startup paper cycle")
+                self.paper_trader.run_cycle()
         return market_count
 
     async def start_background_tasks(self) -> None:

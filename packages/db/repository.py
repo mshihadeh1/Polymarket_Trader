@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from uuid import UUID
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
@@ -8,6 +9,8 @@ from sqlalchemy.orm import sessionmaker
 from packages.core_types.schemas import (
     BacktestMetric,
     BacktestReport,
+    ClosedMarketBatchReport,
+    ClosedMarketEvaluationRecord,
     FeatureSnapshot,
     MarketSummary,
     MinuteBatchReport,
@@ -25,6 +28,7 @@ from packages.core_types.schemas import (
 )
 from packages.db.models import (
     BacktestRunRecord,
+    ClosedMarketBatchReportRecord,
     FeatureSnapshotRecord,
     MinuteBatchReportRecord,
     MinuteFeatureSnapshotRecord,
@@ -142,12 +146,51 @@ class ResearchPersistence:
         )
         self._write(record, merge=True)
 
+    def save_closed_market_batch_report(self, report: ClosedMarketBatchReport) -> None:
+        if not self._session_factory:
+            return
+        record = ClosedMarketBatchReportRecord(
+            id=report.run_id,
+            strategy_name=report.strategy_name,
+            mode=report.mode,
+            asset_filter=report.asset_filter,
+            timeframe_filter=report.timeframe_filter,
+            limit=report.limit,
+            total_markets_evaluated=report.total_markets_evaluated,
+            metrics=[metric.model_dump(mode="json") for metric in report.metrics],
+            coverage=report.coverage,
+            records=[record.model_dump(mode="json") for record in report.records],
+        )
+        self._write(record, merge=True)
+
     def list_minute_research_rows(self) -> list[MinuteResearchRow]:
         if not self._session_factory:
             return []
         with self._session_factory() as session:
             rows = session.query(MinuteResearchRowRecord).order_by(MinuteResearchRowRecord.decision_time.asc()).all()
         return [MinuteResearchRow(**row.payload) for row in rows]
+
+    def list_closed_market_batch_reports(self) -> list[ClosedMarketBatchReport]:
+        if not self._session_factory:
+            return []
+        with self._session_factory() as session:
+            rows = session.query(ClosedMarketBatchReportRecord).order_by(ClosedMarketBatchReportRecord.created_at.desc()).all()
+        return [
+            ClosedMarketBatchReport(
+                run_id=row.id,
+                strategy_name=row.strategy_name,
+                mode=row.mode,  # type: ignore[arg-type]
+                asset_filter=row.asset_filter,
+                timeframe_filter=row.timeframe_filter,
+                limit=row.limit,
+                created_at=row.created_at,
+                total_markets_evaluated=row.total_markets_evaluated,
+                metrics=[BacktestMetric(**metric) for metric in row.metrics],
+                coverage=row.coverage,
+                records=[ClosedMarketEvaluationRecord(**record) for record in row.records],
+            )
+            for row in rows
+        ]
 
     def list_minute_feature_snapshots(self, row_id: str | None = None) -> list[MinuteFeatureSnapshot]:
         if not self._session_factory:
@@ -192,6 +235,7 @@ class ResearchPersistence:
         if not self._session_factory:
             return
         record = PaperDecisionRecord(
+            id=f"{decision.market_id}:{decision.ts.isoformat()}:{decision.action}:{decision.side}:{decision.price}:{decision.size}:{decision.status}",
             market_id=str(decision.market_id),
             ts=decision.ts,
             action=decision.action,
@@ -202,7 +246,28 @@ class ResearchPersistence:
             reason=decision.reason,
             is_dry_run=is_dry_run,
         )
-        self._write(record)
+        self._write(record, merge=True)
+
+    def list_paper_decisions(self) -> list[PaperTradeDecision]:
+        if not self._session_factory:
+            return []
+        with self._session_factory() as session:
+            rows = session.query(PaperDecisionRecord).order_by(PaperDecisionRecord.ts.asc()).all()
+        return [
+            PaperTradeDecision(
+                ts=row.ts,
+                market_id=UUID(row.market_id),
+                action=row.action,
+                side=row.side,
+                price=row.price,
+                size=row.size,
+                status=row.status,
+                reason=row.reason,
+                signal_value=None,
+                confidence=None,
+            )
+            for row in rows
+        ]
 
     def list_backtest_reports(self) -> list[BacktestReport]:
         if not self._session_factory:

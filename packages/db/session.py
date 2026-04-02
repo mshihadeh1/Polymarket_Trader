@@ -14,7 +14,7 @@ def create_session_factory(settings: Settings) -> sessionmaker | None:
     if not settings.enable_db_persistence:
         return None
     db_url = settings.database_url
-    if db_url.startswith("postgresql"):
+    if db_url.startswith("postgresql") or db_url.startswith("sqlite"):
         connect_url = db_url
     else:
         sqlite_path = Path(settings.sqlite_fallback_path)

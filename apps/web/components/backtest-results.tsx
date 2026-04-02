@@ -308,9 +308,9 @@ export async function BacktestResults({
     <div className="page-grid page-shell">
       <section className="panel span-2">
         <div className="section-head">
-          <p className="eyebrow">Edge board</p>
-          <div className="hero-title-row">
-            <h1>Bitcoin up/down edge</h1>
+        <p className="eyebrow">Closed-market evaluations</p>
+        <div className="hero-title-row">
+            <h1>Bitcoin closed-market evaluations</h1>
             <div className="badge-stack">
               <span className="badge badge-provider">{normalizedAsset}</span>
               <span className="badge badge-type">{normalizedTimeframe === "all" ? "5m + 15m" : normalizedTimeframe}</span>
@@ -318,14 +318,14 @@ export async function BacktestResults({
             </div>
           </div>
           <p className="muted">
-            This page is the human-readable answer to whether the strategy has built an edge on short-horizon BTC up/down markets. It emphasizes hit rate, sample size, and per-market evidence rather than raw backend objects.
+            This page shows closed BTC up/down evaluations. It emphasizes hit rate, sample size, and per-market evidence rather than raw backend objects or generic sequential backtests.
           </p>
         </div>
 
         <div className="badge-stack">
-          <Link className="badge badge-type" href="/backtests?asset=BTC&timeframe=all&limit=24">BTC edge board</Link>
-          <Link className="badge badge-type" href="/backtests?asset=BTC&timeframe=crypto_5m&limit=24">BTC 5m only</Link>
-          <Link className="badge badge-type" href="/backtests?asset=BTC&timeframe=crypto_15m&limit=24">BTC 15m only</Link>
+          <Link className="badge badge-type" href="/backtests?asset=BTC&timeframe=all&limit=24">BTC closed markets</Link>
+          <Link className="badge badge-type" href="/backtests?asset=BTC&timeframe=crypto_5m&limit=24">BTC 5m closed markets</Link>
+          <Link className="badge badge-type" href="/backtests?asset=BTC&timeframe=crypto_15m&limit=24">BTC 15m closed markets</Link>
           <Link className="badge badge-provider" href="/replay">Replay tape</Link>
         </div>
 

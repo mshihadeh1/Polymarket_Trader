@@ -36,6 +36,22 @@ class BacktestRunRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
 
 
+class ClosedMarketBatchReportRecord(Base):
+    __tablename__ = "closed_market_batch_reports_cache"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    strategy_name: Mapped[str] = mapped_column(String, nullable=False)
+    mode: Mapped[str] = mapped_column(String, nullable=False)
+    asset_filter: Mapped[str | None] = mapped_column(String)
+    timeframe_filter: Mapped[str | None] = mapped_column(String)
+    limit: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_markets_evaluated: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    metrics: Mapped[list] = mapped_column(JSON, nullable=False)
+    coverage: Mapped[dict] = mapped_column(JSON, nullable=False)
+    records: Mapped[list] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+
 class MinuteResearchRowRecord(Base):
     __tablename__ = "minute_research_rows_cache"
 

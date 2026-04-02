@@ -61,6 +61,7 @@ PowerShell:
 ```
 
 6. Keep `PAPER_TRADING_LOOP_ENABLED=false` for the current observation and CSV backtest runbooks. The paper loop remains out of scope for this validation pass.
+7. If you want results to survive container restarts, set `ENABLE_DB_PERSISTENCE=true` in `.env` before starting the stack.
 
 ## First 10 Minutes After Clone
 
@@ -73,6 +74,7 @@ PowerShell:
 7. Open one market detail page from the dashboard.
 8. If you want real observation next, flip the Polymarket mock flags in `.env` and restart.
 9. If you want closed-market evaluation on your own data next, switch the external provider to `csv` and point the CSV paths to your files.
+10. If you want the UI to start with evidence already on screen, keep `MOCK_STARTUP_DEMO_ENABLED=true` and `ENABLE_DB_PERSISTENCE=true`.
 
 ## Run Modes
 
@@ -87,6 +89,8 @@ USE_MOCK_POLYMARKET=true
 USE_MOCK_POLYMARKET_CLIENT=true
 EXTERNAL_HISTORICAL_PROVIDER=binance
 USE_MOCK_EXTERNAL_PROVIDER=true
+ENABLE_DB_PERSISTENCE=true
+MOCK_STARTUP_DEMO_ENABLED=true
 PAPER_TRADING_LOOP_ENABLED=false
 ```
 
@@ -94,6 +98,7 @@ What to expect:
 - seeded markets and seeded venue data
 - dashboard, replay, backtests, and paper pages all load
 - safest mode for a fresh clone
+- if persistence is enabled, the first boot seeds one closed-market comparison batch and one paper cycle so the UI is not empty
 
 ### Real Polymarket observation mode
 
@@ -107,6 +112,7 @@ USE_MOCK_POLYMARKET_CLIENT=false
 POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
 POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
 USE_MOCK_EXTERNAL_PROVIDER=true
+ENABLE_DB_PERSISTENCE=true
 PAPER_TRADING_LOOP_ENABLED=false
 ```
 
@@ -401,7 +407,7 @@ Expected CSV-startup signs:
 
 Expected backtest-batch signs:
 - `POST /api/v1/evaluations/closed-markets/run?...include_hyperliquid_enrichment=false` returns a batch report
-- [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) shows eligible markets and batch results
+- [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) shows closed-market evaluation results and eligible evidence
 
 ## Verification Checklist
 
@@ -419,8 +425,8 @@ Expected backtest-batch signs:
   - connection status
   - last event time
 - Dashboard BTC quick-launch cards open live BTC 5m or BTC 15m detail pages in real observation mode.
-- Backtests page shows:
-  - recent closed eligible markets
+- Backtests page is the closed-market evaluation board:
+  - recent eligible closed BTC markets
   - bars-only versus enriched comparison
   - enrichment coverage notes
 - CSV baseline batch returns a report from `POST /api/v1/evaluations/closed-markets/run?...include_hyperliquid_enrichment=false`.
@@ -520,7 +526,7 @@ curl -X POST "http://localhost:8000/api/v1/ingestion/hydrate-closed-markets?iden
 - run controls for asset, strategy, timeframe filter, and date range
 - 5m and 15m synthetic report summaries plus real-validation report summaries
 
-8. Open [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) if you want the existing closed-market comparison view:
+8. Open [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) if you want the closed-market evaluation board:
 - eligible closed markets
 - bars-only versus bars-plus-Hyperliquid comparison
 - coverage and missing-data notes

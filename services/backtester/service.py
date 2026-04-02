@@ -60,14 +60,17 @@ class BacktesterService:
             for report in persisted:
                 merged.setdefault(report.run_id, report)
             reports = list(merged.values())
-        return sorted(reports, key=lambda report: report.created_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        return sorted(reports, key=_report_sort_key, reverse=True)
 
     def list_closed_market_batch_reports(self) -> list[ClosedMarketBatchReport]:
-        return sorted(
-            self._state.closed_market_batch_reports,
-            key=lambda report: report.created_at or datetime.min.replace(tzinfo=timezone.utc),
-            reverse=True,
-        )
+        reports = list(self._state.closed_market_batch_reports)
+        if self._persistence is not None and self._persistence.enabled:
+            persisted = self._persistence.list_closed_market_batch_reports()
+            merged = {report.run_id: report for report in reports}
+            for report in persisted:
+                merged.setdefault(report.run_id, report)
+            reports = list(merged.values())
+        return sorted(reports, key=_report_sort_key, reverse=True)
 
     async def _closed_market_candidates(self, *, limit: int) -> list[tuple[dict, PolymarketMarketMetadata]]:
         closed_markets = [
@@ -270,6 +273,8 @@ class BacktesterService:
             records=records,
         )
         self._state.closed_market_batch_reports.insert(0, report)
+        if self._persistence is not None and self._persistence.enabled:
+            self._persistence.save_closed_market_batch_report(report)
         return report
 
     async def _discover_short_horizon_closed_markets(
@@ -698,6 +703,15 @@ def _extract_strike(raw_market: dict, metadata) -> float | None:
         except ValueError:
             continue
     return None
+
+
+def _report_sort_key(report: BacktestReport | ClosedMarketBatchReport) -> datetime:
+    created_at = report.created_at
+    if created_at is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if created_at.tzinfo is None:
+        return created_at.replace(tzinfo=timezone.utc)
+    return created_at
 
 
 def _build_market_detail(raw_market: dict, metadata, *, asset: str, timeframe: str, strike_price: float | None) -> MarketDetail:

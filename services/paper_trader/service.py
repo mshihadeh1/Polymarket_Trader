@@ -37,6 +37,7 @@ class PaperTraderService:
         self._cycle_count = 0
         self._last_update_at: datetime | None = None
         self._loop_error: str | None = None
+        self._paper_blotter_hydrated = False
 
     def reset_state(self) -> None:
         self._last_decision = None
@@ -46,8 +47,10 @@ class PaperTraderService:
         self._cycle_count = 0
         self._last_update_at = None
         self._loop_error = None
+        self._paper_blotter_hydrated = False
 
     def blotter(self) -> list[PaperTradeDecision]:
+        self._hydrate_blotter_from_persistence()
         return self._state.paper_decisions
 
     def status(self) -> PaperTradingStatus:
@@ -176,6 +179,41 @@ class PaperTraderService:
         if self._persistence is not None:
             self._persistence.save_paper_decision(paper_decision, is_dry_run=True)
         return paper_decision
+
+    def _hydrate_blotter_from_persistence(self) -> None:
+        if self._paper_blotter_hydrated:
+            return
+        self._paper_blotter_hydrated = True
+        if self._persistence is None or not self._persistence.enabled:
+            return
+        persisted = self._persistence.list_paper_decisions()
+        if not persisted:
+            return
+        existing = {
+            (
+                str(decision.market_id),
+                decision.ts,
+                decision.action,
+                decision.side,
+                decision.price,
+                decision.size,
+                decision.status,
+            )
+            for decision in self._state.paper_decisions
+        }
+        for decision in persisted:
+            key = (
+                str(decision.market_id),
+                decision.ts,
+                decision.action,
+                decision.side,
+                decision.price,
+                decision.size,
+                decision.status,
+            )
+            if key in existing:
+                continue
+            self._state.paper_decisions.append(decision)
 
     def _apply_decision(self, decision: PaperTradeDecision) -> None:
         market_key = str(decision.market_id)
