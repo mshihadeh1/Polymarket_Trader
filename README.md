@@ -1,20 +1,41 @@
 # Polymarket Trader
 
-Research-first Polymarket platform for short-horizon crypto markets. The current repo is aimed at observation, layered closed-market evaluation, baseline backtesting, and dry-run paper workflows. It is not claiming live-trading readiness and it is not yet a full historical Polymarket trade replay engine.
+Research-first Polymarket platform for short-horizon crypto markets. The goal of this repo is to help you:
 
-## Getting Started
+- inspect live Polymarket markets
+- observe real BTC 5m / 15m venue behavior
+- run bar-based backtests on local 1-minute CSV data
+- compare bars-only research against recent Hyperliquid enrichment
+- keep paper trading dry-run only until you explicitly enable live routing
 
-Fastest path from a fresh clone:
+This is **not** a live trading bot by default. Live execution is scaffolded, disabled by default, and should be treated as opt-in only.
 
-1. Clone the repo:
+## What’s In The Box
+
+- FastAPI backend with market discovery, replay, research, paper trading, and execution scaffolding
+- Next.js dashboard with market, replay, backtest, research, and paper views
+- Provider-pluggable historical data layer with CSV, Binance, and placeholder adapters
+- Local 1-minute BTC / ETH / SOL datasets for research
+- Real Polymarket observation mode with reconnect supervision
+- Closed-market evaluation for BTC 5m / 15m research
+- Cached reports and persistence so the UI is not recomputing everything on every page load
+
+## Requirements
+
+- Docker and Docker Compose
+- Python 3.12 for local tests and scripts
+- Node is only needed if you want to run the Next.js app outside Docker
+
+## Quick Start
+
+### 1. Clone the repo
 
 ```bash
 git clone https://github.com/mshihadeh1/Polymarket_Trader.git
 cd Polymarket_Trader
-git switch codex/persistence-timescale
 ```
 
-2. Copy the root env file:
+### 2. Copy the env file
 
 ```bash
 cp .env.example .env
@@ -26,63 +47,38 @@ PowerShell:
 Copy-Item .env.example .env
 ```
 
-3. Start the stack:
+### 3. Start the stack
 
 ```bash
 docker compose --env-file .env -f infrastructure/docker-compose.yml up --build
 ```
 
-Or use the helper scripts:
+Helper scripts:
 
 ```bash
 ./scripts/dev-up.sh
-```
-
-PowerShell:
-
-```powershell
-./scripts/dev-up.ps1
-```
-
-4. Open the UI:
-- frontend: [http://localhost:3000](http://localhost:3000)
-- backend docs: [http://localhost:8000/docs](http://localhost:8000/docs)
-
-5. Verify health:
-
-```bash
 ./scripts/check-health.sh
 ```
 
 PowerShell:
 
 ```powershell
+./scripts/dev-up.ps1
 ./scripts/check-health.ps1
 ```
 
-6. Keep `PAPER_TRADING_LOOP_ENABLED=false` for the current observation and CSV backtest runbooks. The paper loop remains out of scope for this validation pass.
-7. If you want results to survive container restarts, set `ENABLE_DB_PERSISTENCE=true` in `.env` before starting the stack.
+### 4. Open the app
 
-## First 10 Minutes After Clone
-
-1. Copy `.env.example` to `.env`.
-2. Leave the default mock settings alone for the first run.
-3. Start Docker Compose with `docker compose --env-file .env -f infrastructure/docker-compose.yml up --build`.
-4. Open the dashboard at [http://localhost:3000](http://localhost:3000).
-5. Confirm the dashboard shows `mock venue` and a loaded market table.
-6. Open [http://localhost:8000/healthz](http://localhost:8000/healthz) and [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health).
-7. Open one market detail page from the dashboard.
-8. If you want real observation next, flip the Polymarket mock flags in `.env` and restart.
-9. If you want closed-market evaluation on your own data next, switch the external provider to `csv` and point the CSV paths to your files.
-10. If you want the UI to start with evidence already on screen, keep `MOCK_STARTUP_DEMO_ENABLED=true` and `ENABLE_DB_PERSISTENCE=true`.
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+- Health: [http://localhost:8000/healthz](http://localhost:8000/healthz)
+- System status: [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health)
 
 ## Run Modes
 
 ### Mock mode
 
-Best for first launch, UI verification, and basic development.
-
-Use:
+Use this for the first launch and general development.
 
 ```bash
 USE_MOCK_POLYMARKET=true
@@ -94,29 +90,27 @@ MOCK_STARTUP_DEMO_ENABLED=true
 PAPER_TRADING_LOOP_ENABLED=false
 ```
 
-What to expect:
-- seeded markets and seeded venue data
-- dashboard, replay, backtests, and paper pages all load
-- safest mode for a fresh clone
-- if persistence is enabled, the first boot seeds one closed-market comparison batch and one paper cycle so the UI is not empty
+What you get:
+
+- seeded markets
+- seeded observation data
+- loaded dashboard widgets
+- cached demo research results if persistence is on
 
 ### Real Polymarket observation mode
 
-Best for a 2 to 4 hour venue observation session.
-
-Use:
+Use this to watch live venue behavior for a few hours.
 
 ```bash
 USE_MOCK_POLYMARKET=false
 USE_MOCK_POLYMARKET_CLIENT=false
 POLYMARKET_API_BASE_URL=https://gamma-api.polymarket.com
 POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
-USE_MOCK_EXTERNAL_PROVIDER=true
 ENABLE_DB_PERSISTENCE=true
 PAPER_TRADING_LOOP_ENABLED=false
 ```
 
-Or run the helper:
+Helpful script:
 
 ```bash
 ./scripts/run-real-observation.sh
@@ -129,21 +123,21 @@ PowerShell:
 ```
 
 What is real:
-- active Polymarket market discovery
-- BTC and ETH short-horizon market classification
-- live websocket observation with reconnect supervision
-- UI status for connection state, last event time, dropped events, and duplicate counts
+
+- active market discovery
+- BTC / ETH short-horizon classification
+- websocket observation with reconnect supervision
+- live status in the dashboard
 
 What is not claimed:
+
 - no live trading
 - no trading-grade execution reliability
-- websocket normalization is still narrow and defensive
+- no historical trade replay
 
 ### Historical backtest mode
 
-Best for evaluating closed Polymarket 5m and 15m markets against your own 1-minute historical datasets.
-
-Use:
+Use this to run bar-based research on your local 1-minute datasets.
 
 ```bash
 EXTERNAL_HISTORICAL_PROVIDER=csv
@@ -155,7 +149,7 @@ USE_MOCK_HYPERLIQUID_RECENT=false
 PAPER_TRADING_LOOP_ENABLED=false
 ```
 
-Run one baseline batch with the helper:
+Run the baseline batch:
 
 ```bash
 ./scripts/run-csv-backtest.sh
@@ -167,21 +161,21 @@ PowerShell:
 ./scripts/run-csv-backtest.ps1
 ```
 
-What it does today:
-- loads local 1-minute CSV bars into normalized `OHLCVBar` records
-- validates dataset shape, time coverage, and duplicate timestamps
-- evaluates recent closed Polymarket crypto markets in batch
-- compares bars-only versus bars-plus-Hyperliquid-enriched results
-- stores per-market evaluation records and aggregate comparison metrics
+What it does:
 
-Truthful limitation:
-- this is a layered closed-market evaluator, not a full historical Polymarket trade-replay engine
+- loads local 1-minute CSV bars into normalized internal records
+- validates row count, timestamps, duplicates, and schema issues
+- evaluates closed Polymarket BTC 5m / 15m markets
+- compares bars-only versus bars + recent Hyperliquid enrichment
+- caches reports for the UI
+
+What it does not do:
+
+- it is not a historical Polymarket trade-by-trade replay engine
 
 ### Live paper mode
 
-Best for a dry-run monitoring loop. This is still partial.
-
-Use:
+Use this for a supervised dry-run loop.
 
 ```bash
 USE_MOCK_POLYMARKET=false
@@ -199,25 +193,48 @@ POLYMARKET_SIGNATURE_TYPE=1
 ```
 
 What it does today:
-- periodically evaluates selected live markets
-- appends dry-run decisions continuously
-- tracks latest signal, last decision, open positions, realized PnL, unrealized PnL, and loop health
-- can be paired with the execution ledger when live routing is later enabled
+
+- evaluates selected live markets on a loop
+- appends dry-run decisions
+- tracks open positions, realized PnL, unrealized PnL, cycle count, and loop health
 
 Truthful limitation:
-- this is a supervised dry-run loop for observation and research, not a full live-paper execution simulator
+
+- this is a paper monitoring loop, not a full live execution simulator
+
+### Live execution scaffold
+
+This exists for future opt-in live routing, but remains disabled by default.
+
+```bash
+LIVE_EXECUTION_ENABLED=false
+POLYMARKET_CLOB_HOST=https://clob.polymarket.com
+POLYMARKET_PRIVATE_KEY=
+POLYMARKET_FUNDER=
+POLYMARKET_SIGNATURE_TYPE=1
+POLYMARKET_CHAIN_ID=137
+```
+
+If you do not intend to route real orders, leave `LIVE_EXECUTION_ENABLED=false`.
 
 ## Local Historical Datasets
 
-The repo now supports local 1-minute CSV datasets through the provider layer without changing downstream code.
+The repo supports local 1-minute CSV datasets through the external provider layer.
 
-Expected CSV columns:
+Expected columns:
+
 - `timestamp`, `datetime`, `ts`, or `date`
 - `open`
 - `high`
 - `low`
 - `close`
 - `volume`
+
+Default dataset paths:
+
+- `data/datasets/BTCUSD-1m-104wks-data.csv`
+- `data/datasets/ETHUSD-1m-104wks-data.csv`
+- `data/datasets/SOLUSD-1m-104wks-data.csv`
 
 Example config:
 
@@ -230,373 +247,176 @@ CSV_SOL_PATH=data/datasets/SOLUSD-1m-104wks-data.csv
 EXTERNAL_PROVIDER_SYMBOL_MAP={"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}
 ```
 
-The repo now includes these local 1-minute datasets:
-- `data/datasets/BTCUSD-1m-104wks-data.csv`
-- `data/datasets/ETHUSD-1m-104wks-data.csv`
-- `data/datasets/SOLUSD-1m-104wks-data.csv`
+Startup validation reports include:
 
-Startup validation reports:
-- symbol
 - row count
 - first timestamp
 - last timestamp
 - duplicate count
 - schema issues
 
-## Minute Research Workflow
+## Main Workflows
 
-This is the first-class Layer 1 workflow. It turns the local 1-minute CSV history into cached BTC minute decision rows, computes point-in-time features, and scores a small strategy family set separately on the 5m and 15m horizons before comparing the same logic against real closed-market validation.
+### 1. Closed-market evaluation
+
+This is the current bar-based research flow for BTC 5m / 15m.
+
+- load local CSV history
+- pull recent Hyperliquid enrichment when available
+- evaluate closed BTC 5m / 15m Polymarket markets
+- compare bars-only versus bars + enrichment
+
+Open:
+
+- [http://localhost:3000/backtests?asset=BTC&timeframe=all&limit=24](http://localhost:3000/backtests?asset=BTC&timeframe=all&limit=24)
+- [http://localhost:8000/api/v1/evaluations/results](http://localhost:8000/api/v1/evaluations/results)
+- [http://localhost:8000/api/v1/evaluations/closed-markets?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:8000/api/v1/evaluations/closed-markets?asset=BTC&timeframe=crypto_5m&limit=10)
+
+### 2. Minute research layer
+
+This is the Layer 1 research workflow.
+
+- minute-aligned BTC rows
+- 5m / 15m labels
+- point-in-time features
+- momentum / mean reversion / breakout / regime filters
+- synthetic discovery plus real validation
 
 Open:
 
 - [http://localhost:3000/research/btc-updown](http://localhost:3000/research/btc-updown)
 - [http://localhost:8000/api/v1/research/minute/rows](http://localhost:8000/api/v1/research/minute/rows)
 - [http://localhost:8000/api/v1/research/minute/results](http://localhost:8000/api/v1/research/minute/results)
-- [http://localhost:8000/api/v1/research/minute/live-feature-view?asset=BTC](http://localhost:8000/api/v1/research/minute/live-feature-view?asset=BTC)
-- [http://localhost:8000/api/v1/research/validation/results](http://localhost:8000/api/v1/research/validation/results)
 
-What this does today:
-- generates minute-aligned BTC decision rows from 1-minute bars
-- computes point-in-time features at each decision minute
-- runs momentum, mean-reversion, breakout, and regime-filter strategy families
-- scores 5m and 15m horizons separately
-- caches results so the page can read stored reports instead of recomputing everything
-- scores the same feature pipeline on recent real closed BTC 5m/15m markets as validation
+### 3. Real Polymarket observation
 
-Truthful limitation:
-- this is a bar-based research engine, not a historical Polymarket trade replay engine
+This is for watching live market behavior.
 
-You can inspect this through:
-- `GET /api/v1/external-provider`
-- `GET /api/v1/system/health`
-- `POST /api/v1/research/minute/build`
-- `POST /api/v1/research/minute/run`
-- `POST /api/v1/research/validation/run`
+Open:
 
-Downstream modules remain provider-agnostic:
-- feature engine reads normalized bars
-- market-window service reads normalized bars
-- backtester reads normalized bars
-- UI reads API output, not provider payloads
-
-## Hyperliquid Recent Enrichment Layer
-
-The second layer is recent Hyperliquid data used for enrichment where available.
-
-Config:
-
-```bash
-HYPERLIQUID_INFO_URL=https://api.hyperliquid.xyz/info
-USE_MOCK_HYPERLIQUID_RECENT=false
-HYPERLIQUID_RECENT_TRADE_LIMIT=500
-HYPERLIQUID_RECENT_LOOKBACK_MINUTES=240
-```
-
-What it is used for:
-- recent external CVD
-- rolling external CVD
-- recent trade imbalance
-- recent external returns
-- recent realized volatility
-- current top-of-book imbalance for open markets when available
-
-Important limits:
-- Hyperliquid candle snapshots have limited retention
-- recent trade coverage is best for recent windows, not deep history
-- current L2 book is used for open/live contexts, not for closed historical windows
-- if a source is unavailable, the evaluator skips those features cleanly and records that fact
-
-## Closed Polymarket Evaluation Workflow
-
-This repo now supports a practical layered evaluator for closed Polymarket 5m and 15m crypto markets.
-
-Current evaluation flow:
-1. discover recent closed Polymarket crypto markets
-2. classify underlying and timeframe
-3. load the relevant historical bar window from the CSV provider
-4. add recent Hyperliquid trades and candles where available
-5. compute point-in-time feature snapshots through the same feature pipeline used by live workflows
-6. generate a decision timeline and final decision
-7. compare the final decision with the actual market outcome or a derived close-vs-strike outcome when needed
-
-What this does not mean:
-- this is not a historical Polymarket trade-by-trade replay engine
-- this does not reconstruct historical Polymarket queue position or fills
-- this does not claim full historical Hyperliquid depth or long-horizon historical trades
-
-## Environment Notes
-
-The main file to copy is [`.env.example`](C:/Users/Mahdi/Documents/Polymarket_Trader/.env.example). Docker Compose now reads the root `.env` directly.
-
-Most important flags:
-- `USE_MOCK_POLYMARKET` and `USE_MOCK_POLYMARKET_CLIENT`
-  Controls whether the app boots from seeded mock venue data or the real Polymarket adapter.
-- `POLYMARKET_API_BASE_URL`
-  REST market discovery base URL for real observation mode.
-- `POLYMARKET_WS_URL`
-  websocket endpoint for live Polymarket market events.
-- `EXTERNAL_HISTORICAL_PROVIDER`
-  Selects the historical source used by research flows. Current practical options are `binance` and `csv`.
-- `CSV_BTC_PATH`, `CSV_ETH_PATH`, `CSV_SOL_PATH`
-  Explicit local dataset paths for the first historical layer.
-- `CSV_PROVIDER_PATHS`
-  Optional JSON mapping kept for compatibility with the provider factory.
-- `EXTERNAL_PROVIDER_SYMBOL_MAP`
-  Keeps internal symbols decoupled from vendor-specific symbol strings.
-- `USE_MOCK_HYPERLIQUID_RECENT`
-  Switches the recent Hyperliquid enrichment layer between mock and real mode.
-
-## One-Command Startup
-
-From the repo root:
-
-```bash
-docker compose --env-file .env -f infrastructure/docker-compose.yml up --build
-```
-
-Helper scripts:
-- [scripts/dev-up.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-up.sh)
-- [scripts/dev-down.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-down.sh)
-- [scripts/check-health.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/check-health.sh)
-- [scripts/run-csv-backtest.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/run-csv-backtest.sh)
-- [scripts/run-real-observation.sh](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/run-real-observation.sh)
-- [scripts/dev-up.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-up.ps1)
-- [scripts/dev-down.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/dev-down.ps1)
-- [scripts/check-health.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/check-health.ps1)
-- [scripts/run-csv-backtest.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/run-csv-backtest.ps1)
-- [scripts/run-real-observation.ps1](C:/Users/Mahdi/Documents/Polymarket_Trader/scripts/run-real-observation.ps1)
+- [http://localhost:3000](http://localhost:3000)
+- [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health)
+- [http://localhost:8000/api/v1/markets](http://localhost:8000/api/v1/markets)
 
 ## Health And Verification
 
-Core URLs:
-- frontend: [http://localhost:3000](http://localhost:3000)
-- backend docs: [http://localhost:8000/docs](http://localhost:8000/docs)
-- backend health: [http://localhost:8000/healthz](http://localhost:8000/healthz)
-- system health: [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health)
-
-Sample checks:
+Typical checks:
 
 ```bash
 curl http://localhost:8000/healthz
 curl http://localhost:8000/api/v1/system/health
+curl http://localhost:8000/api/v1/external-provider
 curl http://localhost:8000/api/v1/markets
-curl http://localhost:8000/api/v1/external-provider
-curl "http://localhost:8000/api/v1/evaluations/closed-markets?asset=BTC&timeframe=crypto_5m&limit=10"
-curl -X POST "http://localhost:8000/api/v1/evaluations/closed-markets/run?asset=BTC&timeframe=crypto_5m&limit=10&include_hyperliquid_enrichment=false"
-```
-
-Expected mock-mode signs:
-- dashboard shows `mock venue`
-- `/api/v1/system/health` returns `"mock_polymarket": true`
-- market table loads immediately
-
-Expected real-observation signs:
-- dashboard shows `real venue`
-- dashboard shows websocket status and reconnect count
-- `/api/v1/system/health` returns `"mock_polymarket": false`
-- API logs include messages like:
-  - `Polymarket discovery returned ... selected short-horizon markets`
-  - `Polymarket websocket connected for live observation`
-
-Expected CSV-startup signs:
-- API logs include messages like:
-  - `CSV dataset validation symbol=BTC rows=... first=... last=... duplicates=... issues=[]`
-  - `CSV dataset validation symbol=SOL rows=... first=... last=... duplicates=... issues=[]`
-- `/api/v1/external-provider` returns `"provider_name": "csv"`
-- `/api/v1/external-provider` includes `dataset_validation` entries with:
-  - `row_count`
-  - `first_timestamp`
-  - `last_timestamp`
-  - `duplicate_count`
-  - `schema_issues`
-
-Expected backtest-batch signs:
-- `POST /api/v1/evaluations/closed-markets/run?...include_hyperliquid_enrichment=false` returns a batch report
-- [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) shows closed-market evaluation results and eligible evidence
-
-## Verification Checklist
-
-- Repo cloned successfully.
-- `.env` created from `.env.example`.
-- `docker compose --env-file .env -f infrastructure/docker-compose.yml up --build` completes.
-- [http://localhost:3000](http://localhost:3000) loads.
-- [http://localhost:8000/docs](http://localhost:8000/docs) loads.
-- [http://localhost:8000/healthz](http://localhost:8000/healthz) returns `{"status":"ok"}`.
-- [http://localhost:8000/api/v1/system/health](http://localhost:8000/api/v1/system/health) returns JSON with market and provider details.
-- [http://localhost:8000/api/v1/external-provider](http://localhost:8000/api/v1/external-provider) returns dataset validation details when CSV mode is active.
-- Dashboard clearly shows:
-  - mock vs real Polymarket mode
-  - current external provider
-  - connection status
-  - last event time
-- Dashboard BTC quick-launch cards open live BTC 5m or BTC 15m detail pages in real observation mode.
-- Backtests page is the closed-market evaluation board:
-  - recent eligible closed BTC markets
-  - bars-only versus enriched comparison
-  - enrichment coverage notes
-- CSV baseline batch returns a report from `POST /api/v1/evaluations/closed-markets/run?...include_hyperliquid_enrichment=false`.
-- If using CSV backtests, the configured file paths exist and the files have the required columns.
-- If using real observation mode, the dashboard shows live venue badges and a recent event timestamp.
-
-## Troubleshooting
-
-### Docker Compose starts but the web page is blank
-
-- Check [http://localhost:8000/healthz](http://localhost:8000/healthz).
-- Check `NEXT_PUBLIC_API_BASE_URL` in `.env`.
-- Confirm the `api` and `web` containers are both running.
-
-### Dashboard loads but no markets appear
-
-- In mock mode, verify both mock Polymarket flags are `true`.
-- In real mode, verify both mock Polymarket flags are `false`.
-- Check API logs for discovery messages.
-- Call `POST /api/v1/ingestion/bootstrap` to reload the in-memory session.
-
-### Real observation mode connects but shows stale data
-
-- Check the dashboard websocket badge and reconnect count.
-- Check `/api/v1/system/health` for `last_event_at`, `dropped_event_count`, and `duplicate_event_count`.
-- Restart the stack if the websocket loop is stuck.
-
-### CSV historical mode does not load bars
-
-- Verify `EXTERNAL_HISTORICAL_PROVIDER=csv`.
-- Verify `USE_MOCK_EXTERNAL_PROVIDER=false`.
-- Verify `CSV_BTC_PATH`, `CSV_ETH_PATH`, and `CSV_SOL_PATH` are correct for the symbols you want to evaluate.
-- Verify the CSV has `timestamp` or `datetime`, plus `open/high/low/close/volume`.
-
-### Hyperliquid enrichment is missing
-
-- Check `USE_MOCK_HYPERLIQUID_RECENT`.
-- Check `HYPERLIQUID_INFO_URL`.
-- Check the evaluation record notes and coverage counts.
-- Older closed markets may legitimately have bars only because recent Hyperliquid retention does not reach that far back.
-
-### Paper loop is not running
-
-- Verify `PAPER_TRADING_LOOP_ENABLED=true`.
-- Check `/api/v1/paper-trading/status`.
-- The current paper loop is dry-run only and intentionally simple. It is for monitoring and research, not live execution.
-
-## Practical Runbook
-
-1. Place your CSV datasets in `data/datasets/` or set absolute paths in `.env`.
-2. Set:
-
-```bash
-EXTERNAL_HISTORICAL_PROVIDER=csv
-USE_MOCK_EXTERNAL_PROVIDER=false
-USE_MOCK_HYPERLIQUID_RECENT=false
-```
-
-3. Start the stack:
-
-```bash
-docker compose --env-file .env -f infrastructure/docker-compose.yml up --build
-```
-
-4. Inspect dataset validation:
-
-```bash
-curl http://localhost:8000/api/v1/external-provider
-```
-
-5. List recent closed markets eligible for evaluation:
-
-```bash
 curl "http://localhost:8000/api/v1/evaluations/closed-markets?asset=BTC&timeframe=crypto_5m&limit=10"
 ```
 
-6. Run a baseline-versus-enriched comparison:
+Expected signals:
 
-```bash
-curl -X POST "http://localhost:8000/api/v1/evaluations/compare?asset=BTC&timeframe=crypto_5m&limit=10"
-```
-
-For a baseline-only batch using the current bar-based evaluator:
-
-```bash
-curl -X POST "http://localhost:8000/api/v1/evaluations/closed-markets/run?asset=BTC&timeframe=crypto_5m&limit=10&include_hyperliquid_enrichment=false"
-```
-
-To hydrate known closed BTC 5m / 15m markets directly by slug or market id:
-
-```bash
-curl -X POST "http://localhost:8000/api/v1/ingestion/hydrate-closed-markets?identifiers=btc-updown-5m-1775039700&identifiers=btc-updown-15m-1775039400"
-```
-
-7. Open [http://localhost:3000/research/btc-updown](http://localhost:3000/research/btc-updown) to inspect:
-- cached BTC minute decision rows
-- run controls for asset, strategy, timeframe filter, and date range
-- 5m and 15m synthetic report summaries plus real-validation report summaries
-
-8. Open [http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10](http://localhost:3000/backtests?asset=BTC&timeframe=crypto_5m&limit=10) if you want the closed-market evaluation board:
-- eligible closed markets
-- bars-only versus bars-plus-Hyperliquid comparison
-- coverage and missing-data notes
-
-9. For open markets, switch to real observation mode with `./scripts/run-real-observation.sh` or `./scripts/run-real-observation.ps1` and use the same feature stack through the dashboard and market detail pages.
+- mock mode: dashboard shows `mock venue`
+- real observation mode: dashboard shows `real venue`, websocket status, and reconnect count
+- CSV backtest mode: `/api/v1/external-provider` includes dataset validation details
+- paper mode: `/api/v1/paper-trading/status` shows loop health and dry-run state
 
 ## API Surface
 
-- `GET /healthz`
+The most useful endpoints are:
+
 - `GET /api/v1/markets`
 - `GET /api/v1/markets/{market_id}`
 - `GET /api/v1/markets/{market_id}/orderbook`
 - `GET /api/v1/markets/{market_id}/trades`
 - `GET /api/v1/markets/{market_id}/features`
+- `GET /api/v1/markets/{market_id}/live-feature-view`
 - `GET /api/v1/replay/{market_id}`
-- `POST /api/v1/ingestion/bootstrap`
-- `POST /api/v1/ingestion/hydrate-closed-markets`
-- `GET /api/v1/strategies`
-- `POST /api/v1/backtests/{market_id}`
-- `GET /api/v1/backtests`
-- `GET /api/v1/backtests/{run_id}`
-- `GET /api/v1/research/strategies`
-- `GET /api/v1/research/minute/rows`
-- `POST /api/v1/research/minute/build`
-- `POST /api/v1/research/minute/run`
-- `GET /api/v1/research/minute/results`
-- `GET /api/v1/research/minute/live-feature-view`
-- `POST /api/v1/research/validation/run`
-- `GET /api/v1/research/validation/results`
-- `GET /api/v1/research/minute/strategies`
+- `GET /api/v1/external-provider`
 - `GET /api/v1/evaluations/closed-markets`
 - `POST /api/v1/evaluations/closed-markets/run`
 - `GET /api/v1/evaluations/results`
 - `POST /api/v1/evaluations/compare`
-- `GET /api/v1/markets/{market_id}/live-feature-view`
-- `GET /api/v1/paper-trading/blotter`
+- `GET /api/v1/research/minute/rows`
+- `POST /api/v1/research/minute/build`
+- `POST /api/v1/research/minute/run`
+- `GET /api/v1/research/minute/results`
+- `POST /api/v1/research/validation/run`
+- `GET /api/v1/research/validation/results`
 - `GET /api/v1/paper-trading/status`
-- `POST /api/v1/paper-trading/run/{market_id}`
-- `POST /api/v1/paper-trading/cycle`
-- `POST /api/v1/paper-trading/start`
-- `POST /api/v1/paper-trading/stop`
-- `GET /api/v1/risk/settings`
+- `GET /api/v1/paper-trading/blotter`
 - `GET /api/v1/execution/status`
 - `GET /api/v1/execution/orders`
 - `GET /api/v1/execution/fills`
-- `POST /api/v1/execution/submit`
-- `GET /api/v1/system/health`
+- `GET /api/v1/dashboard/summary`
 
-## Monorepo Layout
+## How To Read The Dashboard
 
-- `apps/api`: FastAPI backend
-- `apps/web`: Next.js dashboard
-- `services/polymarket_ingestor`: Polymarket discovery and live observation ingestion
-- `services/feature_engine`: feature computation and market window alignment
-- `services/backtester`: sequential bar replay backtesting
-- `services/paper_trader`: continuous dry-run paper loop
-- `packages/clients`: provider and venue adapters
-- `packages/core_types`: shared typed models
-- `infrastructure/docker-compose.yml`: local stack
-- `tests`: focused backend tests
+The home page is the quickest way to inspect the system:
+
+- top banner shows mock vs real Polymarket mode
+- live status shows websocket health and event counts
+- research edge board shows bars-only versus enrichment performance
+- rolling edge chart shows whether edge is trending up or down
+- paper/execution cards separate dry-run paper behavior from the execution scaffold
+- BTC quick-launch cards open the two market families we care about most
+
+## Troubleshooting
+
+### Web UI is blank
+
+- check `NEXT_PUBLIC_API_BASE_URL`
+- confirm the API container is up
+- open [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### No markets show up
+
+- check `USE_MOCK_POLYMARKET` and `USE_MOCK_POLYMARKET_CLIENT`
+- check `POST /api/v1/ingestion/bootstrap`
+- check `GET /api/v1/system/health`
+
+### CSV backtest returns nothing
+
+- verify `EXTERNAL_HISTORICAL_PROVIDER=csv`
+- verify `USE_MOCK_EXTERNAL_PROVIDER=false`
+- verify the dataset paths exist
+- verify the CSV has the required columns
+
+### Real observation mode looks stale
+
+- check the websocket badge on the dashboard
+- check `last_event_at`, `dropped_event_count`, and `duplicate_event_count` in system health
+- restart the API container if the stream is stuck
+
+### Paper loop is not running
+
+- verify `PAPER_TRADING_LOOP_ENABLED=true`
+- call `POST /api/v1/paper-trading/start`
+- check `GET /api/v1/paper-trading/status`
+
+### Live execution is not routing orders
+
+- this is expected unless `LIVE_EXECUTION_ENABLED=true`
+- even then, keep it disabled until you intentionally want to test live routing with real credentials
 
 ## Truthful Current Status
 
-- Real Polymarket observation mode is usable for multi-hour monitoring.
-- Closed-market evaluation is usable for baseline research on local 1-minute CSV datasets plus recent Hyperliquid enrichment where available.
-- Live paper mode is partial but useful for continuous dry-run monitoring.
-- Live execution is scaffolded through the official Polymarket CLOB client but remains disabled by default and should be treated as opt-in only.
-- Weather and broader market-type expansion are not part of the current usable local workflow.
+- Real Polymarket observation mode is usable for monitoring.
+- Closed-market evaluation is usable for baseline research on local CSV datasets plus recent Hyperliquid enrichment where available.
+- Minute-based BTC research is cached and viewable in the UI.
+- Live paper mode is partial but useful for dry-run monitoring.
+- Live execution is scaffolded through the official Polymarket CLOB client but remains disabled by default.
+- This repo does **not** claim a full historical Polymarket trade replay engine yet.
+
+## Useful Scripts
+
+- `./scripts/dev-up.sh`
+- `./scripts/dev-down.sh`
+- `./scripts/check-health.sh`
+- `./scripts/run-csv-backtest.sh`
+- `./scripts/run-real-observation.sh`
+
+PowerShell:
+
+- `./scripts/dev-up.ps1`
+- `./scripts/dev-down.ps1`
+- `./scripts/check-health.ps1`
+- `./scripts/run-csv-backtest.ps1`
+- `./scripts/run-real-observation.ps1`
+
