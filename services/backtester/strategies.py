@@ -119,6 +119,56 @@ class CombinedFlowStrategy(BaseStrategy):
         )
 
 
+class FlowAlignment5mStrategy(BaseStrategy):
+    descriptor = StrategyDescriptor(
+        name="flow_alignment_5m",
+        family="cross_venue",
+        description="Trades 5-minute-style flow alignment when fair value and venue flow agree near the strike.",
+        configurable_fields=["min_alignment", "max_spread_bps", "max_distance_to_threshold_bps"],
+    )
+
+    def decide(self, context: StrategyContext) -> StrategyDecision:
+        snapshot = context.feature_snapshot
+        alignment = snapshot.flow_alignment_score or 0.0
+        spread_bps = snapshot.spread_bps
+        distance_bps = abs(snapshot.distance_to_threshold_bps) if snapshot.distance_to_threshold_bps is not None else None
+        time_to_close = snapshot.time_to_close_seconds
+
+        if time_to_close is not None and time_to_close > 390:
+            return self._hold(alignment, "Waiting for the final 5-minute decision window", snapshot)
+        if spread_bps is not None and spread_bps > 300:
+            return self._hold(alignment, "Spread too wide for short-horizon flow entry", snapshot)
+        if distance_bps is not None and distance_bps > 60:
+            return self._hold(alignment, "Underlying is too far from the strike for the flow setup", snapshot)
+        if (
+            snapshot.external_flow_signal is not None
+            and snapshot.polymarket_flow_signal is not None
+            and snapshot.external_flow_signal * snapshot.polymarket_flow_signal < -0.12
+        ):
+            return self._hold(alignment, "External and Polymarket flow disagree materially", snapshot)
+        if abs(alignment) < 0.32:
+            return self._hold(alignment, "Flow alignment is too weak", snapshot)
+
+        decision = "buy_yes" if alignment > 0 else "buy_no"
+        confidence = min(0.55 + abs(alignment) * 0.35, 0.97)
+        return StrategyDecision(
+            signal_value=alignment,
+            decision=decision,
+            confidence=confidence,
+            reason="Short-horizon flow, fair-value gap, and strike proximity are aligned",
+            reasoning_fields=_flow_reasoning_fields(snapshot, alignment),
+        )
+
+    def _hold(self, alignment: float, reason: str, snapshot: FeatureSnapshot) -> StrategyDecision:
+        return StrategyDecision(
+            signal_value=alignment,
+            decision="hold",
+            confidence=min(abs(alignment), 0.9),
+            reason=reason,
+            reasoning_fields=_flow_reasoning_fields(snapshot, alignment),
+        )
+
+
 class PassiveQuoteStrategy(BaseStrategy):
     descriptor = StrategyDescriptor(
         name="passive_quote_prototype",
@@ -151,6 +201,19 @@ def build_strategy_registry() -> dict[str, BaseStrategy]:
         LocalCvdStrategy(),
         HyperliquidCvdStrategy(),
         CombinedFlowStrategy(),
+        FlowAlignment5mStrategy(),
         PassiveQuoteStrategy(),
     ]
     return {strategy.descriptor.name: strategy for strategy in strategies}
+
+
+def _flow_reasoning_fields(snapshot: FeatureSnapshot, alignment: float) -> dict[str, float | str | None]:
+    return {
+        "flow_alignment_score": alignment,
+        "external_flow_signal": snapshot.external_flow_signal,
+        "polymarket_flow_signal": snapshot.polymarket_flow_signal,
+        "fair_value_gap": snapshot.fair_value_gap,
+        "spread_bps": snapshot.spread_bps,
+        "distance_to_threshold_bps": snapshot.distance_to_threshold_bps,
+        "time_to_close_seconds": snapshot.time_to_close_seconds,
+    }

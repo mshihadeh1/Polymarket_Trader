@@ -271,6 +271,10 @@ export type PaperStatus = {
   selected_market_ids: string[];
   signal_count: number;
   simulated_fill_count: number;
+  blocked_signal_count: number;
+  market_refresh_count: number;
+  last_market_refresh_at?: string | null;
+  last_market_refresh_error?: string | null;
   fill_rate: number;
   open_positions: Record<string, number>;
   position_details: {
@@ -288,8 +292,19 @@ export type PaperStatus = {
     signal_value: number;
     decision: string;
     confidence: number;
+    reason?: string | null;
     fair_value_gap?: number;
     midpoint?: number;
+    execution_price?: number;
+    market_window_id?: string | null;
+    flow_alignment_score?: number;
+    external_flow_signal?: number;
+    polymarket_flow_signal?: number;
+    spread_bps?: number;
+    distance_to_threshold_bps?: number;
+    time_to_close_seconds?: number;
+    executed: boolean;
+    blocked_reason?: string | null;
   }[];
   last_decision?: {
     ts: string;

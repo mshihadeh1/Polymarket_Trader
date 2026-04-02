@@ -184,7 +184,12 @@ PAPER_TRADING_LOOP_ENABLED=true
 PAPER_TRADING_LOOP_SECONDS=30
 PAPER_TRADING_UNDERLYINGS=BTC
 PAPER_TRADING_MARKET_TYPES=crypto_5m,crypto_15m
-PAPER_TRADING_STRATEGY=combined_cvd_gap
+PAPER_TRADING_STRATEGY=flow_alignment_5m
+PAPER_TRADING_MARKET_REFRESH_ENABLED=true
+PAPER_TRADING_MARKET_REFRESH_CYCLES=2
+PAPER_TRADING_AUTO_HYDRATE_EXTERNAL=true
+PAPER_TRADING_MIN_CONFIDENCE=0.62
+PAPER_TRADING_SINGLE_FILL_PER_WINDOW=true
 LIVE_EXECUTION_ENABLED=false
 POLYMARKET_CLOB_HOST=https://clob.polymarket.com
 POLYMARKET_PRIVATE_KEY=
@@ -195,8 +200,10 @@ POLYMARKET_SIGNATURE_TYPE=1
 What it does today:
 
 - evaluates selected live markets on a loop
-- appends dry-run decisions
+- appends dry-run decisions with one-fill-per-window guards
+- refreshes active short-horizon markets on cadence
 - tracks open positions, realized PnL, unrealized PnL, cycle count, and loop health
+- auto-settles expired windows from the observed external close when available
 
 Truthful limitation:
 
@@ -333,6 +340,7 @@ The most useful endpoints are:
 - `POST /api/v1/evaluations/closed-markets/run`
 - `GET /api/v1/evaluations/results`
 - `POST /api/v1/evaluations/compare`
+- `POST /api/v1/evaluations/flow-alignment/run`
 - `GET /api/v1/research/minute/rows`
 - `POST /api/v1/research/minute/build`
 - `POST /api/v1/research/minute/run`
@@ -419,4 +427,3 @@ PowerShell:
 - `./scripts/check-health.ps1`
 - `./scripts/run-csv-backtest.ps1`
 - `./scripts/run-real-observation.ps1`
-

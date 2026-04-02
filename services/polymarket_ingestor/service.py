@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Awaitable, Callable
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from packages.clients.polymarket_client import PolymarketClient
@@ -74,6 +75,48 @@ class PolymarketIngestorService:
         logger.info("Polymarket discovery returned %s selected short-horizon markets", count)
         logger.info("Selected %s Polymarket asset ids for live observation", len(selected_asset_ids))
         return count
+
+    async def refresh_active_markets(
+        self,
+        hydrate_external_callback: Callable[[list[str]], Awaitable[None]] | None = None,
+    ) -> int:
+        raw_markets, normalized_markets = await self._client.discover_active_markets()
+        discovered_market_ids: set[str] = set()
+        new_market_ids: list[str] = []
+        refreshed_count = 0
+        selected_asset_ids: list[str] = []
+
+        for raw_market, metadata in zip(raw_markets, normalized_markets, strict=False):
+            market_type, underlying = classify_polymarket_market(metadata)
+            if market_type not in {"crypto_5m", "crypto_15m"}:
+                continue
+            market_id = str(UUID(metadata.market_id) if _is_uuid(metadata.market_id) else uuid5(NAMESPACE_URL, f"polymarket:{metadata.market_id}"))
+            was_known = market_id in self._state.markets
+            summary = self._upsert_market_record(
+                raw_market=raw_market,
+                metadata=normalize_short_horizon_market(metadata, raw_market=raw_market),
+                market_type=market_type,
+                underlying=underlying,
+            )
+            discovered_market_ids.add(market_id)
+            for token in summary.tokens:
+                self._asset_to_market[token.token_id] = market_id
+                selected_asset_ids.append(token.token_id)
+            if not was_known:
+                new_market_ids.append(market_id)
+            refreshed_count += 1
+
+        self._retire_missing_active_markets(discovered_market_ids)
+
+        if hydrate_external_callback is not None and new_market_ids:
+            await hydrate_external_callback(new_market_ids)
+
+        self._state.polymarket_observation.source_mode = self.data_source
+        self._state.polymarket_observation.selected_market_count = refreshed_count
+        self._state.polymarket_observation.selected_asset_count = len(selected_asset_ids)
+        self._state.polymarket_observation.last_error = None
+        logger.info("Refreshed %s active short-horizon markets; new=%s", refreshed_count, len(new_market_ids))
+        return refreshed_count
 
     async def hydrate_closed_markets(self, identifiers: list[str] | None = None, limit: int = 50) -> int:
         candidates: list[tuple[dict[str, object], PolymarketMarketMetadata]] = []
@@ -300,6 +343,73 @@ class PolymarketIngestorService:
         if self._persistence is not None:
             self._persistence.save_market_summary(summary)
         return summary
+
+    def _upsert_market_record(
+        self,
+        *,
+        raw_market: dict[str, object],
+        metadata: PolymarketMarketMetadata,
+        market_type: str,
+        underlying: str | None,
+    ) -> MarketSummary:
+        summary = self._build_market_summary(
+            metadata,
+            raw_market=raw_market,
+            market_type=market_type,
+            underlying=underlying,
+        )
+        market_id = str(summary.id)
+        if market_id not in self._state.markets:
+            return self._store_market_record(
+                raw_market=raw_market,
+                metadata=metadata,
+                market_type=market_type,
+                underlying=underlying,
+            )
+
+        existing_summary = self._state.markets[market_id]
+        summary.external_provider = existing_summary.external_provider
+        summary.source = existing_summary.source
+        summary.status = "closed" if metadata.closed else ("active" if metadata.active else existing_summary.status)
+        summary.tags = existing_summary.tags or summary.tags
+        summary.tokens = existing_summary.tokens or summary.tokens
+        self._state.markets[market_id] = summary
+
+        existing_detail = self._state.market_details.get(market_id)
+        latest_polymarket_orderbook = existing_detail.latest_polymarket_orderbook if existing_detail is not None else None
+        latest_external_orderbook = existing_detail.latest_external_orderbook if existing_detail is not None else None
+        recent_polymarket_trades = existing_detail.recent_polymarket_trades if existing_detail is not None else []
+        recent_external_trades = existing_detail.recent_external_trades if existing_detail is not None else []
+        external_context = existing_detail.external_context if existing_detail is not None else None
+        rules = existing_detail.rules if existing_detail is not None else []
+        self._state.market_details[market_id] = MarketDetail(
+            **summary.model_dump(),
+            rules=rules,
+            latest_polymarket_orderbook=latest_polymarket_orderbook,
+            latest_external_orderbook=latest_external_orderbook,
+            recent_polymarket_trades=recent_polymarket_trades,
+            recent_external_trades=recent_external_trades,
+            external_context=external_context,
+        )
+        if self._persistence is not None:
+            self._persistence.save_market_summary(summary)
+        return summary
+
+    def _retire_missing_active_markets(self, discovered_market_ids: set[str]) -> None:
+        now = datetime.now(timezone.utc)
+        for market_id, summary in list(self._state.markets.items()):
+            if summary.market_type not in {"crypto_5m", "crypto_15m"}:
+                continue
+            if market_id in discovered_market_ids:
+                continue
+            if summary.status != "active":
+                continue
+            if summary.closes_at is not None and summary.closes_at <= now:
+                summary.status = "closed"
+                detail = self._state.market_details.get(market_id)
+                if detail is not None:
+                    detail.status = "closed"
+                logger.info("Retired expired active market market_id=%s slug=%s", market_id, summary.slug)
 
     def _initial_orderbook(self, metadata: PolymarketMarketMetadata) -> OrderBookSnapshot | None:
         if metadata.best_bid is None or metadata.best_ask is None:

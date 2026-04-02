@@ -79,7 +79,15 @@ export async function PaperTradingPanel() {
           </div>
           <div className="list-card">
             <strong>Signals / fills</strong>
-            <span>{status.signal_count} / {status.simulated_fill_count}</span>
+            <span>{status.signal_count} / {status.simulated_fill_count} / blocked {status.blocked_signal_count}</span>
+          </div>
+          <div className="list-card">
+            <strong>Market refresh</strong>
+            <span>{status.market_refresh_count} / {formatLosAngelesDateTime(status.last_market_refresh_at)}</span>
+          </div>
+          <div className="list-card">
+            <strong>Refresh error</strong>
+            <span className="table-meta">{status.last_market_refresh_error || "none"}</span>
           </div>
           <div className="list-card">
             <strong>Loop error</strong>
@@ -141,7 +149,10 @@ export async function PaperTradingPanel() {
               <strong>{signal.decision}</strong>
               <span className="table-meta">{signal.market_id}</span>
               <span className="muted">
-                signal {signal.signal_value.toFixed(3)} | gap {signal.fair_value_gap?.toFixed(3) ?? "n/a"} | mid {signal.midpoint?.toFixed(3) ?? "n/a"}
+                signal {signal.signal_value.toFixed(3)} | align {signal.flow_alignment_score?.toFixed(3) ?? "n/a"} | gap {signal.fair_value_gap?.toFixed(3) ?? "n/a"} | exec {signal.execution_price?.toFixed(3) ?? "n/a"}
+              </span>
+              <span className="muted">
+                spread {signal.spread_bps?.toFixed(0) ?? "n/a"} bps | strike gap {signal.distance_to_threshold_bps?.toFixed(1) ?? "n/a"} bps | {signal.executed ? "executed" : signal.blocked_reason ?? "watching"}
               </span>
             </div>
           ))}

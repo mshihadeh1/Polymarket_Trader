@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Awaitable, Callable
 from uuid import UUID
 
 from packages.db import ResearchPersistence
@@ -21,11 +22,13 @@ class PaperTraderService:
         settings: Settings,
         state: InMemoryState,
         feature_engine: FeatureEngineService,
+        market_refresh_callback: Callable[[], Awaitable[int]] | None = None,
         persistence: ResearchPersistence | None = None,
     ) -> None:
         self._settings = settings
         self._state = state
         self._feature_engine = feature_engine
+        self._market_refresh_callback = market_refresh_callback
         self._persistence = persistence
         self._strategy_registry = build_strategy_registry()
         self._strategy_name = settings.paper_trading_strategy
@@ -36,10 +39,15 @@ class PaperTraderService:
         self._realized_pnl = 0.0
         self._signal_count = 0
         self._simulated_fill_count = 0
+        self._blocked_signal_count = 0
+        self._market_refresh_count = 0
+        self._last_market_refresh_at: datetime | None = None
+        self._last_market_refresh_error: str | None = None
         self._cycle_count = 0
         self._last_update_at: datetime | None = None
         self._loop_error: str | None = None
         self._paper_blotter_hydrated = False
+        self._executed_market_windows: set[str] = set()
 
     def reset_state(self) -> None:
         self._last_decision = None
@@ -48,10 +56,15 @@ class PaperTraderService:
         self._realized_pnl = 0.0
         self._signal_count = 0
         self._simulated_fill_count = 0
+        self._blocked_signal_count = 0
+        self._market_refresh_count = 0
+        self._last_market_refresh_at = None
+        self._last_market_refresh_error = None
         self._cycle_count = 0
         self._last_update_at = None
         self._loop_error = None
         self._paper_blotter_hydrated = False
+        self._executed_market_windows.clear()
 
     def blotter(self) -> list[PaperTradeDecision]:
         self._hydrate_blotter_from_persistence()
@@ -68,6 +81,10 @@ class PaperTraderService:
             selected_market_ids=selected_market_ids,
             signal_count=self._signal_count,
             simulated_fill_count=self._simulated_fill_count,
+            blocked_signal_count=self._blocked_signal_count,
+            market_refresh_count=self._market_refresh_count,
+            last_market_refresh_at=self._last_market_refresh_at,
+            last_market_refresh_error=self._last_market_refresh_error,
             fill_rate=(self._simulated_fill_count / self._signal_count) if self._signal_count else 0.0,
             open_positions=open_positions,
             position_details=list(self._positions.values()),
@@ -106,6 +123,7 @@ class PaperTraderService:
     async def _run_loop(self) -> None:
         while True:
             try:
+                await self._maybe_refresh_markets()
                 self.run_cycle()
                 self._loop_error = None
             except asyncio.CancelledError:
@@ -116,6 +134,7 @@ class PaperTraderService:
             await asyncio.sleep(max(self._settings.paper_trading_loop_seconds, 5))
 
     def run_cycle(self) -> list[PaperTradeDecision]:
+        self._settle_expired_positions()
         decisions: list[PaperTradeDecision] = []
         for market_id in self._selected_market_ids():
             decisions.append(self._evaluate_market(market_id))
@@ -123,7 +142,29 @@ class PaperTraderService:
         self._last_update_at = datetime.now(timezone.utc)
         return decisions
 
+    async def refresh_markets(self) -> int:
+        if not self._settings.paper_trading_market_refresh_enabled or self._market_refresh_callback is None:
+            return 0
+        try:
+            count = await self._market_refresh_callback()
+        except Exception as exc:
+            self._last_market_refresh_error = str(exc)
+            logger.exception("Paper market refresh failed")
+            return 0
+        self._market_refresh_count += 1
+        self._last_market_refresh_at = datetime.now(timezone.utc)
+        self._last_market_refresh_error = None
+        return count
+
     def _selected_market_ids(self) -> list[str]:
+        selected = self._select_market_ids(enforce_time_guard=True)
+        if selected:
+            return selected
+        if self._settings.paper_trading_market_refresh_enabled and self._market_refresh_callback is not None:
+            return selected
+        return self._select_market_ids(enforce_time_guard=False)
+
+    def _select_market_ids(self, *, enforce_time_guard: bool) -> list[str]:
         allowed_underlyings = {
             value.strip().upper()
             for value in self._settings.paper_trading_underlyings.split(",")
@@ -135,8 +176,11 @@ class PaperTraderService:
             if value.strip()
         }
         selected: dict[tuple[str, str], tuple[str, object]] = {}
+        now = datetime.now(timezone.utc)
         for market_id, market in self._state.markets.items():
             if market.status != "active":
+                continue
+            if enforce_time_guard and market.closes_at is not None and market.closes_at <= now:
                 continue
             underlying = (market.underlying or "").upper()
             if allowed_underlyings and underlying not in allowed_underlyings:
@@ -151,6 +195,7 @@ class PaperTraderService:
         return [market_id for market_id, _ in selected.values()]
 
     def _evaluate_market(self, market_id: str) -> PaperTradeDecision:
+        market = self._state.market_details[market_id]
         snapshot = self._feature_engine.compute_snapshot(market_id)
         strategy = self._strategy_registry[self._strategy_name]
         midpoint = (
@@ -159,31 +204,50 @@ class PaperTraderService:
             else snapshot.fair_value_estimate or 0.5
         )
         decision = strategy.decide(StrategyContext(market_price=midpoint, feature_snapshot=snapshot))
+        market_window_id = _market_window_id(market_id, market.closes_at)
+        blocked_reason = self._paper_block_reason(decision, snapshot, market_window_id=market_window_id)
+        executed = blocked_reason is None and decision.decision not in {"hold", "no_trade"}
+        execution_price = _execution_price(decision.decision, midpoint, snapshot.spread)
         self._latest_signals[market_id] = PaperSignalSnapshot(
             market_id=snapshot.market_id,
             ts=snapshot.ts,
             signal_value=decision.signal_value,
             decision=decision.decision,
             confidence=decision.confidence,
+            reason=decision.reason,
             fair_value_gap=snapshot.fair_value_gap,
             midpoint=midpoint,
+            execution_price=execution_price,
+            market_window_id=market_window_id,
+            flow_alignment_score=snapshot.flow_alignment_score,
+            external_flow_signal=snapshot.external_flow_signal,
+            polymarket_flow_signal=snapshot.polymarket_flow_signal,
+            spread_bps=snapshot.spread_bps,
+            distance_to_threshold_bps=snapshot.distance_to_threshold_bps,
+            time_to_close_seconds=snapshot.time_to_close_seconds,
+            executed=executed,
+            blocked_reason=blocked_reason,
         )
         self._signal_count += 1
+        if blocked_reason is not None:
+            self._blocked_signal_count += 1
+        reason = decision.reason if blocked_reason is None else f"{decision.reason} | blocked: {blocked_reason}"
         paper_decision = PaperTradeDecision(
             ts=snapshot.ts,
             market_id=snapshot.market_id,
             action="loop_eval",
             side=decision.decision,
-            price=midpoint,
-            size=100.0 if decision.decision not in {"hold", "no_trade"} else 0.0,
-            status="simulated_fill" if decision.decision not in {"hold", "no_trade"} else "no_action",
-            reason=decision.reason,
+            price=execution_price if executed else midpoint,
+            size=100.0 if executed else 0.0,
+            status="simulated_fill" if executed else "no_action",
+            reason=reason,
             signal_value=decision.signal_value,
             confidence=decision.confidence,
         )
         self._apply_decision(paper_decision)
         if paper_decision.status == "simulated_fill":
             self._simulated_fill_count += 1
+            self._executed_market_windows.add(market_window_id)
         self._state.paper_decisions.append(paper_decision)
         self._last_decision = paper_decision
         if self._persistence is not None:
@@ -277,3 +341,89 @@ class PaperTraderService:
             max_market_exposure_usd=self._settings.max_market_exposure_usd,
             global_kill_switch=True,
         )
+
+    def _paper_block_reason(self, decision, snapshot, *, market_window_id: str) -> str | None:
+        if decision.decision in {"hold", "no_trade"}:
+            return None
+        if decision.confidence < self._settings.paper_trading_min_confidence:
+            return f"confidence_below_threshold({self._settings.paper_trading_min_confidence:.2f})"
+        if (
+            self._settings.paper_trading_single_fill_per_window
+            and market_window_id in self._executed_market_windows
+        ):
+            return "single_fill_per_window_guard"
+        if snapshot.spread_bps is not None and snapshot.spread_bps > 300:
+            return "spread_guard"
+        return None
+
+    async def _maybe_refresh_markets(self) -> None:
+        if not self._settings.paper_trading_market_refresh_enabled or self._market_refresh_callback is None:
+            return
+        if self._settings.paper_trading_market_refresh_cycles <= 0:
+            return
+        if self._cycle_count > 0 and self._cycle_count % self._settings.paper_trading_market_refresh_cycles != 0:
+            return
+        await self.refresh_markets()
+
+    def _settle_expired_positions(self) -> None:
+        now = datetime.now(timezone.utc)
+        for market_key, position in list(self._positions.items()):
+            market = self._state.market_details.get(market_key)
+            if market is None or market.closes_at is None or market.closes_at > now:
+                continue
+            settlement_price, settlement_reason = self._resolve_settlement_price(market_key, market)
+            realized = (settlement_price - position.avg_price) * position.size * (
+                1.0 if position.side == "buy_yes" else -1.0
+            )
+            self._realized_pnl += realized
+            market.status = "closed"
+            summary = self._state.markets.get(market_key)
+            if summary is not None:
+                summary.status = "closed"
+            settlement_decision = PaperTradeDecision(
+                ts=now,
+                market_id=position.market_id,
+                action="auto_settle",
+                side=position.side,
+                price=settlement_price,
+                size=position.size,
+                status="settled",
+                reason=settlement_reason,
+                signal_value=None,
+                confidence=None,
+            )
+            self._state.paper_decisions.append(settlement_decision)
+            if self._persistence is not None:
+                self._persistence.save_paper_decision(settlement_decision, is_dry_run=True)
+            del self._positions[market_key]
+
+    def _resolve_settlement_price(self, market_id: str, market) -> tuple[float, str]:
+        try:
+            snapshot = self._feature_engine.compute_snapshot(market_id, as_of=market.closes_at)
+        except KeyError:
+            snapshot = None
+        if snapshot is not None and snapshot.distance_to_threshold is not None:
+            settlement_price = 1.0 if snapshot.distance_to_threshold > 0 else 0.0
+            return settlement_price, "Auto-settled from external close versus strike"
+        position = self._positions.get(market_id)
+        fallback = position.mark_price if position is not None else 0.5
+        return fallback, "Auto-settled from last available mark"
+
+
+def _market_window_id(market_id: str, closes_at: datetime | None) -> str:
+    if closes_at is None:
+        return market_id
+    return f"{market_id}:{closes_at.isoformat()}"
+
+
+def _execution_price(decision: str, midpoint: float, spread: float | None) -> float:
+    half_spread = (spread or 0.0) / 2.0
+    if decision in {"buy_yes", "passive_no"}:
+        return _clamp_probability(midpoint + half_spread)
+    if decision in {"buy_no", "passive_yes"}:
+        return _clamp_probability(midpoint - half_spread)
+    return _clamp_probability(midpoint)
+
+
+def _clamp_probability(value: float) -> float:
+    return max(0.01, min(0.99, value))

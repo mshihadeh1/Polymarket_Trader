@@ -231,17 +231,24 @@ class FeatureSnapshot(BaseModel):
     ts: datetime
     polymarket_cvd: float
     polymarket_rolling_cvd: dict[str, float] = Field(default_factory=dict)
+    polymarket_rolling_trade_imbalance: dict[str, float] = Field(default_factory=dict)
     external_cvd: float
     external_rolling_cvd: dict[str, float] = Field(default_factory=dict)
+    external_rolling_trade_imbalance: dict[str, float] = Field(default_factory=dict)
     polymarket_trade_imbalance: float
     external_trade_imbalance: float
+    polymarket_flow_signal: float | None = None
+    external_flow_signal: float | None = None
+    flow_alignment_score: float | None = None
     best_bid: float | None = None
     best_ask: float | None = None
     spread: float | None = None
+    spread_bps: float | None = None
     top_of_book_imbalance: float | None = None
     fair_value_estimate: float | None = None
     fair_value_gap: float | None = None
     distance_to_threshold: float | None = None
+    distance_to_threshold_bps: float | None = None
     time_to_close_seconds: float | None = None
     external_return_since_open: float | None = None
     lead_lag_gap: float | None = None
@@ -569,8 +576,19 @@ class PaperSignalSnapshot(BaseModel):
     signal_value: float
     decision: str
     confidence: float
+    reason: str | None = None
     fair_value_gap: float | None = None
     midpoint: float | None = None
+    execution_price: float | None = None
+    market_window_id: str | None = None
+    flow_alignment_score: float | None = None
+    external_flow_signal: float | None = None
+    polymarket_flow_signal: float | None = None
+    spread_bps: float | None = None
+    distance_to_threshold_bps: float | None = None
+    time_to_close_seconds: float | None = None
+    executed: bool = False
+    blocked_reason: str | None = None
 
 
 class PaperPosition(BaseModel):
@@ -590,6 +608,10 @@ class PaperTradingStatus(BaseModel):
     selected_market_ids: list[UUID] = Field(default_factory=list)
     signal_count: int = 0
     simulated_fill_count: int = 0
+    blocked_signal_count: int = 0
+    market_refresh_count: int = 0
+    last_market_refresh_at: datetime | None = None
+    last_market_refresh_error: str | None = None
     fill_rate: float = 0.0
     open_positions: dict[str, float] = Field(default_factory=dict)
     position_details: list[PaperPosition] = Field(default_factory=list)

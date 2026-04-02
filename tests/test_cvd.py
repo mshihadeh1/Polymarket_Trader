@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from packages.core_types.schemas import Trade
-from packages.utils.cvd import cumulative_volume_delta, rolling_cvd, trade_imbalance
+from packages.utils.cvd import cumulative_volume_delta, rolling_cvd, rolling_trade_imbalance, trade_imbalance
 
 
 def build_trade(second: int, size: float, side: str) -> Trade:
@@ -30,3 +30,10 @@ def test_rolling_cvd_respects_time_window() -> None:
 def test_trade_imbalance_normalizes_volume() -> None:
     trades = [build_trade(1, 6, "buy"), build_trade(2, 4, "sell")]
     assert trade_imbalance(trades) == 0.2
+
+
+def test_rolling_trade_imbalance_respects_time_window() -> None:
+    trades = [build_trade(1, 10, "buy"), build_trade(10, 4, "sell"), build_trade(20, 6, "sell")]
+    values = rolling_trade_imbalance(trades, trades[-1].ts, [5, 30])
+    assert values["5s"] == -1.0
+    assert values["30s"] == 0.0

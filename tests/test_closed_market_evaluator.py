@@ -127,3 +127,17 @@ def test_closed_market_resolution_prefers_polymarket_truth() -> None:
 
     assert result.records[0].actual_resolution == "no"
     assert result.records[0].actual_resolution_source == "polymarket:resolved_outcome"
+
+
+def test_flow_alignment_evaluation_uses_recommended_strategy_defaults() -> None:
+    container = build_container(Settings())
+    result = asyncio.run(
+        container.backtester.run_flow_alignment_evaluation(
+            asset="BTC",
+            timeframe="crypto_5m",
+            limit=2,
+            include_hyperliquid_enrichment=True,
+        )
+    )
+    assert result.strategy_name == "flow_alignment_5m"
+    assert result.timeframe_filter == "crypto_5m"

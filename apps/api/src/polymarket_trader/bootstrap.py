@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from packages.clients.hyperliquid_client import MockHyperliquidClient, RealHyperliquidClient
@@ -161,11 +162,47 @@ def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Cont
         market_window=market_window,
         persistence=persistence,
     )
+    polymarket_ingestor = PolymarketIngestorService(state, client=polymarket_client, persistence=persistence)
+
+    async def refresh_live_markets() -> int:
+        async def hydrate_new_markets(market_ids: list[str]) -> None:
+            now = datetime.now(timezone.utc)
+            for market_id in market_ids:
+                market = state.market_details.get(market_id)
+                if market is None or market.underlying is None or market.opens_at is None:
+                    continue
+                end = market.closes_at or now
+                if end > now:
+                    end = now
+                assembled = hyperliquid_ingestor.assemble_window(
+                    market.underlying,
+                    start=market.opens_at,
+                    end=end,
+                    include_recent_enrichment=True,
+                    include_current_orderbook=market.status == "active",
+                )
+                state.external_bars[market_id] = assembled["bars"]
+                state.external_trades[market_id] = assembled["trades"]
+                state.external_orderbooks[market_id] = assembled["orderbooks"]
+                state.external_raw_payloads[market_id] = assembled["raw_payloads"]
+                state.external_feature_availability[market_id] = assembled["availability"].model_dump(mode="json")
+                market.external_provider = external_provider.provider_name
+                if assembled["orderbooks"]:
+                    market.latest_external_orderbook = assembled["orderbooks"][-1]
+                if assembled["trades"]:
+                    market.recent_external_trades = assembled["trades"][-20:]
+                if market.external_context is not None:
+                    market.external_context.provider = external_provider.provider_name
+
+        return await polymarket_ingestor.refresh_active_markets(
+            hydrate_external_callback=hydrate_new_markets if settings.paper_trading_auto_hydrate_external else None,
+        )
+
     container = Container(
         settings=settings,
         state=state,
         market_catalog=MarketCatalogService(state),
-        polymarket_ingestor=PolymarketIngestorService(state, client=polymarket_client, persistence=persistence),
+        polymarket_ingestor=polymarket_ingestor,
         hyperliquid_ingestor=hyperliquid_ingestor,
         market_window=market_window,
         feature_engine=feature_engine,
@@ -184,6 +221,7 @@ def build_container(settings: Settings, bootstrap_on_build: bool = True) -> Cont
             settings=settings,
             state=state,
             feature_engine=feature_engine,
+            market_refresh_callback=refresh_live_markets,
             persistence=persistence,
         ),
         execution_engine=ExecutionEngineService(

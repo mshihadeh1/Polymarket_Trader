@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     use_mock_polymarket: bool = Field(default=True, alias="USE_MOCK_POLYMARKET")
     use_mock_polymarket_client: bool = Field(default=True, alias="USE_MOCK_POLYMARKET_CLIENT")
     live_execution_enabled: bool = Field(default=False, alias="LIVE_EXECUTION_ENABLED")
-    feature_trade_windows: str = Field(default="5,15,30", alias="FEATURE_TRADE_WINDOWS")
+    feature_trade_windows: str = Field(default="15,60,180", alias="FEATURE_TRADE_WINDOWS")
     max_market_exposure_usd: float = Field(default=500.0, alias="MAX_MARKET_EXPOSURE_USD")
     default_underlyings: str = Field(default="BTC,ETH,SOL", alias="DEFAULT_UNDERLYINGS")
     enable_db_persistence: bool = Field(default=False, alias="ENABLE_DB_PERSISTENCE")
@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     paper_trading_underlyings: str = Field(default="BTC", alias="PAPER_TRADING_UNDERLYINGS")
     paper_trading_market_types: str = Field(default="crypto_5m,crypto_15m", alias="PAPER_TRADING_MARKET_TYPES")
     paper_trading_strategy: str = Field(default="combined_cvd_gap", alias="PAPER_TRADING_STRATEGY")
+    paper_trading_market_refresh_enabled: bool = Field(default=True, alias="PAPER_TRADING_MARKET_REFRESH_ENABLED")
+    paper_trading_market_refresh_cycles: int = Field(default=2, alias="PAPER_TRADING_MARKET_REFRESH_CYCLES")
+    paper_trading_auto_hydrate_external: bool = Field(default=True, alias="PAPER_TRADING_AUTO_HYDRATE_EXTERNAL")
+    paper_trading_min_confidence: float = Field(default=0.62, alias="PAPER_TRADING_MIN_CONFIDENCE")
+    paper_trading_single_fill_per_window: bool = Field(default=True, alias="PAPER_TRADING_SINGLE_FILL_PER_WINDOW")
     mock_startup_demo_enabled: bool = Field(default=False, alias="MOCK_STARTUP_DEMO_ENABLED")
 
 

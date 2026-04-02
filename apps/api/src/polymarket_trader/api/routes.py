@@ -311,6 +311,20 @@ def build_router(container: Container) -> APIRouter:
             strategy_name=strategy_name,
         )
 
+    @router.post("/evaluations/flow-alignment/run")
+    async def run_flow_alignment_batch(
+        asset: str = Query(default="BTC"),
+        timeframe: str = Query(default="crypto_5m"),
+        limit: int = Query(default=30),
+        include_hyperliquid_enrichment: bool = Query(default=True),
+    ):
+        return await container.backtester.run_flow_alignment_evaluation(
+            asset=asset,
+            timeframe=timeframe,
+            limit=limit,
+            include_hyperliquid_enrichment=include_hyperliquid_enrichment,
+        )
+
     @router.get("/paper-trading/blotter")
     def blotter():
         return container.paper_trader.blotter()

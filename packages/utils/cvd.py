@@ -24,6 +24,15 @@ def rolling_cvd(trades: list[Trade], as_of: datetime, windows_seconds: list[int]
     return values
 
 
+def rolling_trade_imbalance(trades: list[Trade], as_of: datetime, windows_seconds: list[int]) -> dict[str, float]:
+    values: dict[str, float] = {}
+    for window in windows_seconds:
+        start = as_of - timedelta(seconds=window)
+        window_trades = [trade for trade in trades if start <= trade.ts <= as_of]
+        values[f"{window}s"] = trade_imbalance(window_trades)
+    return values
+
+
 def trade_imbalance(trades: Iterable[Trade]) -> float:
     buy = 0.0
     sell = 0.0

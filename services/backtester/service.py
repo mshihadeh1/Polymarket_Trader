@@ -255,6 +255,22 @@ class BacktesterService:
             "bars_plus_hyperliquid": enriched,
         }
 
+    async def run_flow_alignment_evaluation(
+        self,
+        *,
+        asset: str = "BTC",
+        timeframe: str = "crypto_5m",
+        limit: int = 30,
+        include_hyperliquid_enrichment: bool = True,
+    ) -> ClosedMarketBatchReport:
+        return await self.run_closed_market_batch(
+            asset=asset,
+            timeframe=timeframe,
+            limit=limit,
+            strategy_name="flow_alignment_5m",
+            include_hyperliquid_enrichment=include_hyperliquid_enrichment,
+        )
+
     async def run_closed_market_batch(
         self,
         *,
