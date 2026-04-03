@@ -393,6 +393,9 @@ class SyntheticFeatureSnapshot(BaseModel):
     acceleration: float | None = None
     trend_regime: str = "unknown"
     time_of_day_bucket: str = "unknown"
+    # CVD fields from Hyperliquid (or synthetic proxy)
+    external_cvd: float | None = None
+    external_trade_imbalance: float | None = None
     feature_summary: dict[str, float | str | None] = Field(default_factory=dict)
 
 

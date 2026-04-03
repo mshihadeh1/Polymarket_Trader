@@ -461,8 +461,10 @@ class SyntheticResearchService:
         current = relevant[-1]
         current_price = float(current.close)
         closes = [float(bar.close) for bar in relevant]
+        volumes = [float(bar.volume) for bar in relevant]
         if len(closes) < 2:
             closes = [float(current.open), float(current.close)]
+            volumes = [float(current.volume), float(current.volume)]
 
         prior_return_1m = _return_from_closes(closes, 1)
         prior_return_3m = _return_from_closes(closes, 3)
@@ -480,6 +482,44 @@ class SyntheticResearchService:
             acceleration = prior_return_1m - (prior_return_3m / 3.0)
         trend_regime = _trend_regime(prior_return_5m, prior_return_15m, realized_vol_15m)
         time_of_day_bucket = _time_of_day_bucket(decision_time)
+
+        # === CVD Proxy Generation (for synthetic backtesting) ===
+        # In production, this comes from Hyperliquid via external_ingestor
+        # Here we create a PROXY with realistic noise to simulate real CVD data
+        external_cvd = 0.0
+        external_trade_imbalance = 0.0
+        
+        if len(closes) >= 5 and len(volumes) >= 5:
+            import random
+            random.seed(hash(str(decision_time)) % (2**32))  # Deterministic but noisy
+            
+            # CVD proxy: cumulative sum of signed volume based on price direction
+            cvd_window = min(20, len(closes))
+            cvd_values = []
+            for i in range(1, cvd_window):
+                price_change = closes[i] - closes[i-1]
+                volume = volumes[i]
+                # Positive CVD if price up, negative if down
+                cvd_values.append(volume if price_change > 0 else -volume)
+            
+            # Normalize CVD to [-1, 1] range
+            total_cvd = sum(cvd_values[-10:])  # Last 10 periods
+            max_volume = sum(abs(v) for v in cvd_values[-10:]) or 1.0
+            base_cvd = total_cvd / max_volume
+            
+            # Add realistic noise (CVD is NOT perfectly correlated with price)
+            # In real markets, CVD can diverge from price due to:
+            # - Hidden liquidity
+            # - Market maker positioning
+            # - Cross-venue arbitrage
+            noise = random.gauss(0, 0.3)  # 30% noise
+            external_cvd = max(-1.0, min(1.0, base_cvd * 0.7 + noise))
+            
+            # Trade imbalance: recent buy vs sell pressure with noise
+            recent_cvd = sum(cvd_values[-5:])  # Last 5 periods
+            base_imbalance = recent_cvd / max_volume
+            noise_imb = random.gauss(0, 0.25)  # 25% noise
+            external_trade_imbalance = max(-1.0, min(1.0, base_imbalance * 0.6 + noise_imb))
 
         snapshot = SyntheticFeatureSnapshot(
             sample_id=sample.sample_id,
@@ -505,6 +545,9 @@ class SyntheticResearchService:
             acceleration=acceleration,
             trend_regime=trend_regime,
             time_of_day_bucket=time_of_day_bucket,
+            # CVD fields (synthetic proxy)
+            external_cvd=external_cvd,
+            external_trade_imbalance=external_trade_imbalance,
             feature_summary={
                 "prior_return_1m": prior_return_1m,
                 "prior_return_3m": prior_return_3m,
@@ -518,6 +561,8 @@ class SyntheticResearchService:
                 "acceleration": acceleration,
                 "trend_regime": trend_regime,
                 "time_of_day_bucket": time_of_day_bucket,
+                "external_cvd": external_cvd,
+                "external_trade_imbalance": external_trade_imbalance,
             },
         )
         return snapshot
