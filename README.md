@@ -5,6 +5,7 @@ Research-first Polymarket platform for short-horizon crypto markets. The goal of
 - inspect live Polymarket markets
 - observe real BTC 5m / 15m venue behavior
 - run bar-based backtests on local 1-minute CSV data
+- run EV-first backtests on executable Polymarket quotes with dynamic fee and slippage assumptions
 - compare bars-only research against recent Hyperliquid enrichment
 - keep paper trading dry-run only until you explicitly enable live routing
 
@@ -18,6 +19,8 @@ This is **not** a live trading bot by default. Live execution is scaffolded, dis
 - Local 1-minute BTC / ETH / SOL datasets for research
 - Real Polymarket observation mode with reconnect supervision
 - Closed-market evaluation for BTC 5m / 15m research
+- EV-first evaluation with maker/taker simulation, replayable decision points, and fee-aware accounting
+- Dynamic fee and tick metadata persisted from market payloads and updates
 - Cached reports and persistence so the UI is not recomputing everything on every page load
 
 ## Requirements
@@ -137,7 +140,7 @@ What is not claimed:
 
 ### Historical backtest mode
 
-Use this to run bar-based research on your local 1-minute datasets.
+Use this to run bar-based research on your local 1-minute datasets and compare them against the EV-first closed-market path.
 
 ```bash
 EXTERNAL_HISTORICAL_PROVIDER=csv
@@ -167,11 +170,45 @@ What it does:
 - validates row count, timestamps, duplicates, and schema issues
 - evaluates closed Polymarket BTC 5m / 15m markets
 - compares bars-only versus bars + recent Hyperliquid enrichment
+- can run EV-first evaluation with executable prices, dynamic fee metadata, and taker or maker assumptions
 - caches reports for the UI
 
 What it does not do:
 
 - it is not a historical Polymarket trade-by-trade replay engine
+
+### EV-first closed-market research
+
+This is the recommended path when you want to answer the real question: is there positive net EV after executable prices, fees, slippage, and timing are treated honestly?
+
+Use it to:
+
+- compare `lead_lag_dislocation`, `late_window_reversion`, and `maker_edge_v2` against the existing baseline strategies
+- keep `combined_cvd_gap` and `flow_alignment_5m` as baseline comparisons
+- compare `midpoint`, `taker`, `maker`, and `ev_first` execution modes
+- inspect replayable decision points with exact features and execution context
+- measure net PnL, EV/share, calibration, drawdown, spread buckets, time-to-close buckets, and distance-to-threshold buckets
+
+Example runs:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/evaluations/ev-first/run?asset=BTC&timeframe=crypto_5m&limit=30&strategy_name=lead_lag_dislocation"
+curl -X POST "http://localhost:8000/api/v1/evaluations/closed-markets/run?asset=BTC&timeframe=crypto_15m&limit=20&strategy_name=maker_edge_v2&execution_mode=maker"
+```
+
+Important assumptions:
+
+- Polymarket fee configuration is fetched dynamically from market metadata and fee snapshots when available
+- top-of-book prices are preferred over midpoint-only logic
+- Hyperliquid remains the external microstructure source for enrichment and lead-lag context
+- missing fee or tick metadata is treated as a degraded report, not as a hardcoded guess
+
+How to read the report:
+
+- positive net EV/share and positive holdout net PnL matter more than headline hit rate
+- calibration by confidence bucket tells you whether the signal is overconfident
+- maker-vs-taker comparisons tell you whether the edge survives venue friction
+- a `warning` or `no-go` flag means the sample is not yet strong enough to treat as durable
 
 ### Live paper mode
 
@@ -204,6 +241,7 @@ What it does today:
 - refreshes active short-horizon markets on cadence
 - tracks open positions, realized PnL, unrealized PnL, cycle count, and loop health
 - auto-settles expired windows from the observed external close when available
+- uses fee-aware maker/taker simulation when paper execution is enabled
 
 Truthful limitation:
 
@@ -266,12 +304,14 @@ Startup validation reports include:
 
 ### 1. Closed-market evaluation
 
-This is the current bar-based research flow for BTC 5m / 15m.
+This is the current closed-market research flow for BTC 5m / 15m.
 
 - load local CSV history
 - pull recent Hyperliquid enrichment when available
 - evaluate closed BTC 5m / 15m Polymarket markets
 - compare bars-only versus bars + enrichment
+- compare midpoint versus taker/maker/executable EV assumptions
+- inspect decision replay points for any single market
 
 Open:
 
@@ -288,6 +328,7 @@ This is the Layer 1 research workflow.
 - point-in-time features
 - momentum / mean reversion / breakout / regime filters
 - synthetic discovery plus real validation
+- use it as a hypothesis generator only, not as the final live-edge claim
 
 Open:
 
@@ -334,14 +375,17 @@ The most useful endpoints are:
 - `GET /api/v1/markets/{market_id}/trades`
 - `GET /api/v1/markets/{market_id}/features`
 - `GET /api/v1/markets/{market_id}/live-feature-view`
+- `GET /api/v1/markets/{market_id}/decision-replay`
 - `GET /api/v1/replay/{market_id}`
 - `GET /api/v1/external-provider`
 - `GET /api/v1/evaluations/closed-markets`
 - `POST /api/v1/evaluations/closed-markets/run`
 - `GET /api/v1/evaluations/results`
 - `POST /api/v1/evaluations/compare`
+- `POST /api/v1/evaluations/ev-first/run`
 - `POST /api/v1/evaluations/flow-alignment/run`
 - `GET /api/v1/research/minute/rows`
+- `GET /api/v1/research/minute/strategies`
 - `POST /api/v1/research/minute/build`
 - `POST /api/v1/research/minute/run`
 - `GET /api/v1/research/minute/results`
@@ -349,6 +393,9 @@ The most useful endpoints are:
 - `GET /api/v1/research/validation/results`
 - `GET /api/v1/paper-trading/status`
 - `GET /api/v1/paper-trading/blotter`
+- `POST /api/v1/paper-trading/start`
+- `POST /api/v1/paper-trading/stop`
+- `POST /api/v1/paper-trading/cycle`
 - `GET /api/v1/execution/status`
 - `GET /api/v1/execution/orders`
 - `GET /api/v1/execution/fills`
@@ -407,10 +454,11 @@ The home page is the quickest way to inspect the system:
 
 - Real Polymarket observation mode is usable for monitoring.
 - Closed-market evaluation is usable for baseline research on local CSV datasets plus recent Hyperliquid enrichment where available.
+- EV-first closed-market evaluation is available with maker/taker simulation, replayable decision points, and dynamic fee handling.
 - Minute-based BTC research is cached and viewable in the UI.
 - Live paper mode is partial but useful for dry-run monitoring.
 - Live execution is scaffolded through the official Polymarket CLOB client but remains disabled by default.
-- This repo does **not** claim a full historical Polymarket trade replay engine yet.
+- This repo still does **not** claim a full historical Polymarket trade replay engine for every venue nuance, so use the EV-first reports as research rather than a guarantee.
 
 ## Useful Scripts
 
@@ -419,6 +467,7 @@ The home page is the quickest way to inspect the system:
 - `./scripts/check-health.sh`
 - `./scripts/run-csv-backtest.sh`
 - `./scripts/run-real-observation.sh`
+- `python scripts/download_hyperliquid_btc_ticks.py --start 2025-03-22 --end 2026-04-01 --out data/hyperliquid/btc_ticks.csv`
 
 PowerShell:
 
@@ -427,3 +476,25 @@ PowerShell:
 - `./scripts/check-health.ps1`
 - `./scripts/run-csv-backtest.ps1`
 - `./scripts/run-real-observation.ps1`
+
+### Hyperliquid BTC tick export
+
+This downloader pulls market-wide BTC ticks from Hyperliquid's public S3 archive and writes them to CSV.
+
+Install the extra Python packages first:
+
+```bash
+python -m pip install boto3 lz4
+```
+
+Then run:
+
+```bash
+python scripts/download_hyperliquid_btc_ticks.py --start 2025-03-22 --end 2026-04-01 --out data/hyperliquid/btc_ticks.csv
+```
+
+Useful flags:
+
+- `--source auto` spans the known `node_trades`, `node_fills`, and `node_fills_by_block` windows
+- `--coin BTC` keeps BTC rows only
+- `--max-keys 5` is handy for a smoke test before downloading a full range
